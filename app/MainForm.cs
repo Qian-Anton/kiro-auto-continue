@@ -27,7 +27,7 @@ namespace KiroAutoContinue
         TextBox webhook, botId, secret; Button testBtn, connectBtn;
         CheckBox evNeedsYou, evDone, evMorning;
         // settings
-        CheckBox startChk, awakeChk; Label idleLbl, langLbl, localNote; NumericUpDown idleNum; ComboBox langCombo;
+        CheckBox startChk, awakeChk; Label idleLbl, idleSuffix, langLbl, localNote; NumericUpDown idleNum; ComboBox langCombo;
 
         Timer timer;
 
@@ -43,6 +43,9 @@ namespace KiroAutoContinue
             timer.Tick += (s, e) => Tick();
             timer.Start();
             Tick();
+            int ti;
+            if (int.TryParse(Environment.GetEnvironmentVariable("KAC_TAB"), out ti) && ti >= 0 && ti < tabs.TabPages.Count)
+                tabs.SelectedIndex = ti;
         }
 
         string U(string key) { return Json.Str(Json.At(ui, key)); }
@@ -53,12 +56,16 @@ namespace KiroAutoContinue
             base.OnFormClosed(e);
         }
 
+        const int Pad = 16;
+        const int Wide = 868;   // content width inside the 900 client
+
         void Build()
         {
-            StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(780, 580);
-            MinimumSize = new Size(620, 460);
+            AutoScaleMode = AutoScaleMode.Dpi;
             Font = new Font("Microsoft YaHei UI", 9f);
+            StartPosition = FormStartPosition.CenterScreen;
+            ClientSize = new Size(900, 620);
+            MinimumSize = new Size(720, 520);
 
             tabs = new TabControl { Dock = DockStyle.Fill };
             pSess = new TabPage(); pPhone = new TabPage(); pSet = new TabPage();
@@ -72,70 +79,78 @@ namespace KiroAutoContinue
 
         void BuildSessions()
         {
-            sessStatus = new Label { Location = new Point(14, 12), AutoSize = true, Font = new Font(Font, FontStyle.Bold) };
-            pauseBtn = new Button { Location = new Point(640, 8), Size = new Size(120, 28), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            var top = new Panel { Dock = DockStyle.Top, Height = 42, Padding = new Padding(Pad, 10, Pad, 4) };
+            sessStatus = new Label { Dock = DockStyle.Fill, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Font = new Font(Font, FontStyle.Bold) };
+            pauseBtn = new Button { Dock = DockStyle.Right, Width = 120 };
             pauseBtn.Click += (s, e) => { watcher.Pause(!watcher.Paused); Tick(); };
+            top.Controls.Add(sessStatus);
+            top.Controls.Add(pauseBtn);
 
-            list = new ListView
-            {
-                Location = new Point(14, 44),
-                Size = new Size(746, 300),
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
-                View = View.Details,
-                FullRowSelect = true,
-                MultiSelect = false,
-                HideSelection = false
-            };
-            colNum = list.Columns.Add("#", 50);
-            colName = list.Columns.Add("", 480);
-            colState = list.Columns.Add("", 200);
-            list.SelectedIndexChanged += (s, e) => UpdateButtons();
-
-            contBtn = new Button { Location = new Point(14, 352), Size = new Size(110, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Enabled = false };
-            stopBtn = new Button { Location = new Point(132, 352), Size = new Size(90, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Enabled = false };
+            var bottom = new Panel { Dock = DockStyle.Bottom, Height = 200, Padding = new Padding(Pad, 0, Pad, 12) };
+            var btnRow = new Panel { Dock = DockStyle.Top, Height = 42 };
+            contBtn = new Button { Location = new Point(0, 6), Size = new Size(110, 30), Enabled = false };
+            stopBtn = new Button { Location = new Point(120, 6), Size = new Size(90, 30), Enabled = false };
             contBtn.Click += (s, e) => { string id = SelectedId(); if (id != null) watcher.RequestContinue(id); };
             stopBtn.Click += (s, e) => { string id = SelectedId(); if (id != null) watcher.RequestStop(id); };
-
+            btnRow.Controls.Add(contBtn);
+            btnRow.Controls.Add(stopBtn);
             logBox = new TextBox
             {
-                Location = new Point(14, 390),
-                Size = new Size(746, 150),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+                Dock = DockStyle.Fill,
                 Multiline = true,
                 ReadOnly = true,
                 ScrollBars = ScrollBars.Vertical,
                 BackColor = Color.White,
                 Font = new Font("Consolas", 8.5f)
             };
+            bottom.Controls.Add(logBox);
+            bottom.Controls.Add(btnRow);
 
-            pSess.Controls.AddRange(new Control[] { sessStatus, pauseBtn, list, contBtn, stopBtn, logBox });
+            list = new ListView
+            {
+                Dock = DockStyle.Fill,
+                View = View.Details,
+                FullRowSelect = true,
+                MultiSelect = false,
+                HideSelection = false
+            };
+            colNum = list.Columns.Add("#", 46);
+            colName = list.Columns.Add("", 540);
+            colState = list.Columns.Add("", 232);
+            list.SelectedIndexChanged += (s, e) => UpdateButtons();
+
+            pSess.Controls.Add(list);
+            pSess.Controls.Add(bottom);
+            pSess.Controls.Add(top);
+            pSess.Padding = new Padding(Pad, 8, Pad, 8);
         }
 
         void BuildPhone()
         {
-            notifyTitle = new Label { Location = new Point(14, 14), AutoSize = true, Font = new Font(Font, FontStyle.Bold) };
-            notifyHelp = new Label { Location = new Point(14, 38), Size = new Size(746, 36), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, ForeColor = Color.DimGray };
-            webhook = new TextBox { Location = new Point(14, 76), Size = new Size(610, 26), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
-            testBtn = new Button { Location = new Point(632, 75), Size = new Size(128, 28), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            var l = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            notifyTitle = new Label { Location = new Point(Pad, 14), AutoSize = true, Font = new Font(Font, FontStyle.Bold) };
+            notifyHelp = new Label { Location = new Point(Pad, 40), Size = new Size(Wide, 22), Anchor = l, ForeColor = Color.DimGray };
+            webhook = new TextBox { Location = new Point(Pad, 70), Size = new Size(Wide - 160, 26), Anchor = l };
+            testBtn = new Button { Location = new Point(Pad + Wide - 148, 69), Size = new Size(148, 28), Anchor = AnchorStyles.Top | AnchorStyles.Right };
             testBtn.Click += (s, e) => DoTestNotice();
-            testState = new Label { Location = new Point(14, 106), Size = new Size(746, 20), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, ForeColor = Color.DimGray };
-            evNeedsYou = new CheckBox { Location = new Point(14, 130), AutoSize = true };
-            evDone = new CheckBox { Location = new Point(170, 130), AutoSize = true };
-            evMorning = new CheckBox { Location = new Point(360, 130), AutoSize = true };
+            testState = new Label { Location = new Point(Pad, 102), Size = new Size(Wide, 20), Anchor = l, ForeColor = Color.DimGray };
+            evNeedsYou = new CheckBox { Location = new Point(Pad, 128), AutoSize = true };
+            evDone = new CheckBox { Location = new Point(Pad, 156), AutoSize = true };
+            evMorning = new CheckBox { Location = new Point(Pad, 184), AutoSize = true };
             evNeedsYou.CheckedChanged += (s, e) => SaveEvents();
             evDone.CheckedChanged += (s, e) => SaveEvents();
             evMorning.CheckedChanged += (s, e) => { if (!loading) Save("report.time", evMorning.Checked ? "08:00" : ""); };
 
-            remoteTitle = new Label { Location = new Point(14, 172), AutoSize = true, Font = new Font(Font, FontStyle.Bold) };
-            remoteHelp = new Label { Location = new Point(14, 196), Size = new Size(746, 36), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, ForeColor = Color.DimGray };
-            botIdLbl = new Label { Location = new Point(14, 238), AutoSize = true };
-            botId = new TextBox { Location = new Point(90, 235), Size = new Size(670, 26), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
-            secretLbl = new Label { Location = new Point(14, 270), AutoSize = true };
-            secret = new TextBox { Location = new Point(90, 267), Size = new Size(670, 26), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, UseSystemPasswordChar = true };
-            connectBtn = new Button { Location = new Point(14, 302), Size = new Size(100, 30) };
+            remoteTitle = new Label { Location = new Point(Pad, 226), AutoSize = true, Font = new Font(Font, FontStyle.Bold) };
+            remoteHelp = new Label { Location = new Point(Pad, 252), Size = new Size(Wide, 40), Anchor = l, ForeColor = Color.DimGray };
+            botIdLbl = new Label { Location = new Point(Pad, 302), AutoSize = true };
+            botId = new TextBox { Location = new Point(Pad + 80, 299), Size = new Size(Wide - 80, 26), Anchor = l };
+            secretLbl = new Label { Location = new Point(Pad, 334), AutoSize = true };
+            secret = new TextBox { Location = new Point(Pad + 80, 331), Size = new Size(Wide - 80, 26), Anchor = l, UseSystemPasswordChar = true };
+            connectBtn = new Button { Location = new Point(Pad, 366), Size = new Size(100, 30) };
             connectBtn.Click += (s, e) => DoConnect();
-            remoteState = new Label { Location = new Point(126, 308), AutoSize = true, ForeColor = Color.DimGray };
-            pairLabel = new Label { Location = new Point(14, 344), Size = new Size(746, 40), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, ForeColor = Color.FromArgb(30, 60, 160) };
+            remoteState = new Label { Location = new Point(Pad + 112, 372), AutoSize = true, ForeColor = Color.DimGray };
+            pairLabel = new Label { Location = new Point(Pad, 406), Size = new Size(Wide, 40), Anchor = l, ForeColor = Color.FromArgb(30, 60, 160) };
 
             pPhone.Controls.AddRange(new Control[] { notifyTitle, notifyHelp, webhook, testBtn, testState, evNeedsYou, evDone, evMorning,
                 remoteTitle, remoteHelp, botIdLbl, botId, secretLbl, secret, connectBtn, remoteState, pairLabel });
@@ -143,19 +158,20 @@ namespace KiroAutoContinue
 
         void BuildSettings()
         {
-            startChk = new CheckBox { Location = new Point(16, 20), AutoSize = true };
+            startChk = new CheckBox { Location = new Point(Pad, 22), AutoSize = true };
             startChk.CheckedChanged += (s, e) => { if (!loading) { SetStartup(startChk.Checked); Save("startWithWindows", startChk.Checked); } };
-            awakeChk = new CheckBox { Location = new Point(16, 52), AutoSize = true };
+            awakeChk = new CheckBox { Location = new Point(Pad, 56), AutoSize = true };
             awakeChk.CheckedChanged += (s, e) => { if (!loading) Save("keepAwake.enabled", awakeChk.Checked); };
-            idleLbl = new Label { Location = new Point(16, 90), AutoSize = true };
-            idleNum = new NumericUpDown { Location = new Point(220, 88), Size = new Size(70, 26), Minimum = 10, Maximum = 1800, Increment = 10 };
+            idleLbl = new Label { Location = new Point(Pad, 96), AutoSize = true };
+            idleNum = new NumericUpDown { Location = new Point(Pad + 170, 93), Size = new Size(76, 26), Minimum = 10, Maximum = 1800, Increment = 10 };
             idleNum.ValueChanged += (s, e) => { if (!loading) Save("idleSeconds", (int)idleNum.Value); };
-            langLbl = new Label { Location = new Point(16, 126), AutoSize = true };
-            langCombo = new ComboBox { Location = new Point(220, 123), Size = new Size(160, 26), DropDownStyle = ComboBoxStyle.DropDownList };
+            idleSuffix = new Label { Location = new Point(Pad + 256, 96), AutoSize = true };
+            langLbl = new Label { Location = new Point(Pad, 134), AutoSize = true };
+            langCombo = new ComboBox { Location = new Point(Pad + 170, 131), Size = new Size(160, 26), DropDownStyle = ComboBoxStyle.DropDownList };
             langCombo.SelectedIndexChanged += (s, e) => OnLangChanged();
-            localNote = new Label { Location = new Point(16, 170), Size = new Size(740, 40), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, ForeColor = Color.DimGray };
+            localNote = new Label { Location = new Point(Pad, 180), Size = new Size(Wide, 40), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, ForeColor = Color.DimGray };
 
-            pSet.Controls.AddRange(new Control[] { startChk, awakeChk, idleLbl, idleNum, langLbl, langCombo, localNote });
+            pSet.Controls.AddRange(new Control[] { startChk, awakeChk, idleLbl, idleNum, idleSuffix, langLbl, langCombo, localNote });
         }
 
         void Localize()
@@ -168,14 +184,15 @@ namespace KiroAutoContinue
             contBtn.Text = U("continueNow"); stopBtn.Text = U("stop");
 
             notifyTitle.Text = U("notifyTitle"); notifyHelp.Text = U("notifyHelp");
-            webhook.PlaceholderTextSafe(U("webhookHint")); testBtn.Text = U("testNotify");
+            testBtn.Text = U("testNotify");
             evNeedsYou.Text = U("evNeedsYou"); evDone.Text = U("evDone"); evMorning.Text = U("evMorning");
             remoteTitle.Text = U("remoteTitle"); remoteHelp.Text = U("remoteHelp");
             botIdLbl.Text = "Bot ID"; secretLbl.Text = "Secret"; connectBtn.Text = U("connect");
 
             startChk.Text = U("settingsStart"); awakeChk.Text = U("settingsAwake");
-            idleLbl.Text = Policy.FormatText(U("settingsIdle"), new Dictionary<string, string> { { "n", "" } }).Replace("  ", " ").Trim();
-            langLbl.Text = U("tabSettings"); // placeholder, set below
+            string isd = U("settingsIdle"); int ix = isd.IndexOf("{n}");
+            idleLbl.Text = ix >= 0 ? isd.Substring(0, ix).Trim() : isd;
+            idleSuffix.Text = ix >= 0 ? isd.Substring(ix + 3).Trim() : "";
             langLbl.Text = cfg.UiLang() == "zh" ? "\u8bed\u8a00" : "Language";
             localNote.Text = U("localNote");
 
@@ -213,7 +230,6 @@ namespace KiroAutoContinue
             loading = false;
         }
 
-        // nested override: "a.b" -> { a: { b: value } }
         void Save(string dotted, object value)
         {
             var parts = dotted.Split('.');
@@ -227,10 +243,10 @@ namespace KiroAutoContinue
         void SaveEvents()
         {
             if (loading) return;
-            var list2 = new List<string>();
-            if (evNeedsYou.Checked) list2.Add("needsYou");
-            if (evDone.Checked) list2.Add("done");
-            Save("notify.events", list2.ToArray());
+            var evs = new List<string>();
+            if (evNeedsYou.Checked) evs.Add("needsYou");
+            if (evDone.Checked) evs.Add("done");
+            Save("notify.events", evs.ToArray());
         }
 
         void DoTestNotice()
@@ -291,11 +307,9 @@ namespace KiroAutoContinue
         void UpdateButtons()
         {
             string id = SelectedId();
-            bool any = id != null;
-            var rows = watcher.LastSnapshot;
-            var row = rows.FirstOrDefault(r => r.Id == id);
-            stopBtn.Enabled = any && row != null && row.Running;
-            contBtn.Enabled = any && row != null && !row.Running;
+            var row = watcher.LastSnapshot.FirstOrDefault(r => r.Id == id);
+            stopBtn.Enabled = row != null && row.Running;
+            contBtn.Enabled = row != null && !row.Running;
         }
 
         void Tick()
@@ -329,7 +343,7 @@ namespace KiroAutoContinue
             UpdateButtons();
 
             string st = watcher.RemoteStateText;
-            remoteState.Text = st == "online" ? U("online") : st == "connecting" || st == "starting" ? U("connecting") : U("offline");
+            remoteState.Text = st == "online" ? U("online") : (st == "connecting" || st == "starting") ? U("connecting") : U("offline");
             if (watcher.PairCode != null)
                 pairLabel.Text = Policy.FormatText(U("pair"), new Dictionary<string, string> { { "code", watcher.PairCode } });
             else if (watcher.HasPaired())
@@ -344,19 +358,8 @@ namespace KiroAutoContinue
 
         void AppendLog(string line)
         {
-            if (logBox.Lines.Length > 400)
-                logBox.Lines = logBox.Lines.Skip(logBox.Lines.Length - 300).ToArray();
+            if (logBox.Lines.Length > 400) logBox.Lines = logBox.Lines.Skip(logBox.Lines.Length - 300).ToArray();
             logBox.AppendText(line + "\r\n");
-        }
-    }
-
-    internal static class ControlExtensions
-    {
-        // PlaceholderText exists only on newer frameworks; set a cue banner via the control's prompt when empty.
-        public static void PlaceholderTextSafe(this TextBox box, string text)
-        {
-            // net48 TextBox has no placeholder; show the hint only when empty and unfocused would need extra
-            // plumbing, so just set the tooltip-like behavior off and leave the field empty.
         }
     }
 }

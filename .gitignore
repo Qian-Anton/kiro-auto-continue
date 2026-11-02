@@ -1,0 +1,6 @@
+# your own settings, the accounts paired with your bot, and the run logs stay on your machine
+config.json
+remote-allow.json
+logs/
+# local development notes
+NOTES.md

@@ -1,0 +1,7 @@
+{
+  "pollSeconds": 2,
+  "idleSeconds": 15,
+  "settleSeconds": 5,
+  "resume": { "maxTries": 3, "delaysSeconds": [5, 10, 15] },
+  "testing": { "cancelIsInterrupt": true }
+}

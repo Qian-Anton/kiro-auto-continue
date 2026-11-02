@@ -1,5 +1,5 @@
 using System;
-using System.Windows.Automation;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace KiroAutoContinue
@@ -7,17 +7,22 @@ namespace KiroAutoContinue
     internal static class Program
     {
         [STAThread]
-        private static void Main(string[] args)
+        private static void Main()
         {
-            Config cfg = Config.Load();
-            // Touch UI Automation so the linker pulls in UIAutomationClient/Types + WindowsBase early; the real
-            // watcher and GUI replace this stub in the next rounds.
-            AutomationElement root = AutomationElement.RootElement;
-            object ui = Json.At(cfg.Words(cfg.UiLang()), "ui");
-            string title = Json.Str(Json.At(ui, "appTitle"), "Kiro Auto Continue");
-            MessageBox.Show(
-                "Loaded config.\nData dir: " + cfg.DataDir + "\nUIA root found: " + (root != null),
-                title);
+            bool created;
+            using (var mx = new Mutex(true, "KiroAutoContinue.SingleInstance", out created))
+            {
+                if (!created) return;   // already running
+                Native.SetProcessDPIAware();
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+
+                Config cfg = Config.Load();
+                var watcher = new Watcher(cfg);
+                watcher.Start();
+                using (var ctx = new TrayAppContext(cfg, watcher)) Application.Run(ctx);
+                watcher.StopAndWait();
+            }
         }
     }
 }

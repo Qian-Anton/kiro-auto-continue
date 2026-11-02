@@ -199,7 +199,12 @@
         "testSent": "发出去了，看手机收到没有。",
         "testFail": "没发出去：{why}",
         "needWebhook": "先粘 webhook 地址。",
-        "needBot": "先填 Bot ID 和 Secret。"
+        "needBot": "先填 Bot ID 和 Secret。",
+        "show": "打开",
+        "exit": "退出",
+        "langAuto": "跟随系统",
+        "saved": "已保存",
+        "remoteNote": "改了机器人，点「连接」就重连。"
       }
     },
     "en": {
@@ -383,7 +388,12 @@
         "testSent": "Sent. Check your phone.",
         "testFail": "Not sent: {why}",
         "needWebhook": "Paste the webhook URL first.",
-        "needBot": "Fill in the Bot ID and Secret first."
+        "needBot": "Fill in the Bot ID and Secret first.",
+        "show": "Open",
+        "exit": "Exit",
+        "langAuto": "Follow Windows",
+        "saved": "Saved",
+        "remoteNote": "Changed the bot? Click Connect to reconnect."
       }
     }
   }

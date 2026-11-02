@@ -4,3 +4,8 @@ remote-allow.json
 logs/
 # local development notes
 NOTES.md
+# the portable .NET SDK (downloaded, not committed) and C# build output
+.tools/
+bin/
+obj/
+*.user

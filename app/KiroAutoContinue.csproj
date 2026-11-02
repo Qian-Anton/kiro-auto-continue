@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>KiroAutoContinue</AssemblyName>
+    <RootNamespace>KiroAutoContinue</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <DebugType>embedded</DebugType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Product>Kiro Auto Continue</Product>
+    <Company>Yuntao Qian</Company>
+    <AssemblyTitle>Kiro Auto Continue</AssemblyTitle>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- build-time only: lets us target net48 without the Developer Pack installed -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="UIAutomationClient" />
+    <Reference Include="UIAutomationTypes" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="Accessibility" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- the defaults are baked into the exe, so the distributable is a single file -->
+    <EmbeddedResource Include="config.default.json" />
+  </ItemGroup>
+
+</Project>

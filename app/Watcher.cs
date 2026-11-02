@@ -17,6 +17,8 @@ namespace KiroAutoContinue
         public DateTime StopAt, Due;
         public int Fails;
         public bool Told, ToldKiro, ToldWorking, CreditsBack;
+        public string Plan = "";   // what Look decided to send (a Decision.Kind); "" until it has decided
+        public string Wait = "";   // why it is not sent yet: "" (its delay), idle, kiro, or a retry: notab, draft, retry
     }
 
     // One row for the GUI session list.
@@ -25,6 +27,11 @@ namespace KiroAutoContinue
         public int Number;
         public string Id = "", Workspace = "", Title = "", State = "", Need = "";
         public bool Running, Pending, NeedsYou, Queued, UntilDone;
+        public string Kind = "";        // running, done, cut, stopped, restart
+        public string Attention = "";   // the notice code it is flagged with (need codes, or done)
+        public string Plan = "", Wait = "";
+        public DateTime Due;            // when a planned message goes (Pending only)
+        public int QueuedCount;
     }
 
     // The engine: watches Kiro's records and acts, the same way as kiro-auto-continue.ps1. Runs on its own STA
@@ -56,12 +63,19 @@ namespace KiroAutoContinue
 
         public readonly List<string> Recent = new List<string>();
         public event Action<string> OnLog;
-        public event Action<string, string> OnNotice;   // (tag, text) for a tray balloon
         public volatile List<SessionRow> LastSnapshot = new List<SessionRow>();
+        readonly bool readOnly;   // --preview: never writes the log, numbers or activity files
 
         static readonly Regex RxStop = new Regex("\"stopReason\":\"(\\w+)\"", RegexOptions.Compiled);
 
-        public Watcher(Config cfg) { this.cfg = cfg; }
+        public Watcher(Config cfg, bool readOnly = false)
+        {
+            this.cfg = cfg; this.readOnly = readOnly;
+            LoadActivities();
+        }
+
+        // A line from the window (an error it caught), in the same log.
+        public void LogUi(string s) { Log("window: " + s); }
 
         public string PairCode { get { return pairCode; } }
         public bool Paused { get { return paused; } }
@@ -73,12 +87,16 @@ namespace KiroAutoContinue
 
         public void Pause(bool on)
         {
+            if (paused == on) return;
             paused = on;
             Log(on ? "paused: not continuing sessions on its own" : "watching again");
+            Act(on ? "paused" : "resumed");
         }
 
         public void Start()
         {
+            // a test copy (see KAC_DATA_DIR) can start paused, so it never types into Kiro
+            if (cfg.Bool("testing.startPaused", false)) paused = true;
             thread = new Thread(Run) { IsBackground = true, Name = "kac-watcher" };
             thread.SetApartmentState(ApartmentState.STA);
             thread.Start();
@@ -99,7 +117,7 @@ namespace KiroAutoContinue
             string line = DateTime.Now.ToString("MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "  " + s;
             lock (logLock)
             {
-                try { File.AppendAllText(cfg.LogPath, line + "\r\n", new UTF8Encoding(false)); } catch { }
+                if (!readOnly) try { File.AppendAllText(cfg.LogPath, line + "\r\n", new UTF8Encoding(false)); } catch { }
                 Recent.Add(line);
                 if (Recent.Count > 600) Recent.RemoveRange(0, Recent.Count - 600);
             }
@@ -125,8 +143,8 @@ namespace KiroAutoContinue
         void WriteNotice(string code, string name, string tag, string detail, string id = "")
         {
             Log(name + " : " + tag + " - " + detail);
-            var hn = OnNotice; if (hn != null) try { hn(tag, name + (detail.Length > 0 ? " - " + detail : "")); } catch { }
             if (!string.IsNullOrEmpty(id)) attention[id] = code;
+            Act(code == "done" ? "done" : "need." + code, id);
             if (!string.IsNullOrEmpty(id) && code == "outOfCredits") creditWait[id] = DateTime.Now;
             string kind = code == "done" ? "done" : "needsYou";
             if (Json.Str(cfg.At("notify", "webhook")).Length == 0) return;
@@ -138,9 +156,10 @@ namespace KiroAutoContinue
             if (err.Length > 0) Log("notice not sent: " + err);
         }
 
-        void WaitLook(string id, string why, int seconds = 60)
+        void WaitLook(string id, string why, int seconds = 60, string code = "retry")
         {
             Pending pd; if (!pending.TryGetValue(id, out pd)) return;
+            pd.Wait = code;
             pd.Fails++;
             if (pd.Fails >= 6)
             {
@@ -180,30 +199,37 @@ namespace KiroAutoContinue
                 d = Policy.Decide(turn, st, cfg);
             if (queued != null) d.Set["Tries"] = 0;
 
-            if (d.Action == "none") { d.Apply(st); pending.Remove(id); Log(name + " : " + d.Why); return; }
+            if (d.Action == "none")
+            {
+                d.Apply(st); pending.Remove(id); Log(name + " : " + d.Why);
+                Act(turn.Cancelled ? "stopped" : "finished", id);
+                return;
+            }
             if (d.Action == "stop") { d.Apply(st); pending.Remove(id); WriteNotice(d.Code, name, "NEEDS YOU", d.Why, id); return; }
             if (d.Action == "done") { d.Apply(st); pending.Remove(id); WriteNotice("done", name, "DONE", d.Why, id); return; }
             if (d.Action == "wait") { WaitLook(id, d.Why); return; }
 
+            pd.Plan = d.Kind;   // from here on the window shows what is coming and when
             DateTime due = pd.StopAt.AddSeconds(d.After);
-            if (due > DateTime.Now) { pd.Due = due; Log(name + " : " + d.Why + "; will send in " + (int)(due - DateTime.Now).TotalSeconds + " s"); return; }
+            if (due > DateTime.Now) { pd.Due = due; pd.Wait = ""; Log(name + " : " + d.Why + "; will send in " + (int)(due - DateTime.Now).TotalSeconds + " s"); return; }
             if (sent >= cfg.Int("resume.maxPerRun", 200)) { pending.Remove(id); WriteNotice("tooMany", name, "NEEDS YOU", d.Why + "; not sent, " + sent + " messages this run already", id); return; }
 
             DateTime? ks = Records.GetKiroStart();
             if (ks == null || (DateTime.Now - ks.Value).TotalSeconds < cfg.Int("kiroStartupSeconds", 60))
             {
                 if (!pd.ToldKiro) { pd.ToldKiro = true; Log(name + " : " + d.Why + "; waiting for Kiro to start up"); }
-                pd.Due = DateTime.Now.AddSeconds(15); return;
+                pd.Due = DateTime.Now.AddSeconds(15); pd.Wait = "kiro"; return;
             }
             int idleNeed = d.Kind == "queued" ? cfg.Int("remote.idleSeconds", 15) : cfg.Int("idleSeconds", 180);
             if (Native.IdleSeconds() < idleNeed)
             {
                 if (!pd.Told) { pd.Told = true; Log(name + " : " + d.Why + "; will send once keyboard and mouse have been idle for " + idleNeed + " s"); }
-                pd.Due = DateTime.Now.AddSeconds(15); return;
+                pd.Due = DateTime.Now.AddSeconds(15); pd.Wait = "idle"; return;
             }
+            pd.Wait = "";
 
             var found = KiroUi.FindSessionTab(info);
-            if (found.Count != 1) { WaitLook(id, found.Count == 0 ? "its tab is not open in Kiro" : "several tabs have its title", 300); return; }
+            if (found.Count != 1) { WaitLook(id, found.Count == 0 ? "its tab is not open in Kiro" : "several tabs have its title", 300, found.Count == 0 ? "notab" : "retry"); return; }
             var root = found.Hit.Root; var tab = found.Hit.Tab;
             if (tab.State == "Working")
             {
@@ -219,10 +245,11 @@ namespace KiroAutoContinue
                 string lastUser = turn.Users.Count > 0 ? turn.Users[0] : "";
                 if (!KiroUi.WaitShownUser(root, lastUser, 20)) { WaitLook(id, "its tab does not show its last message yet" + locked); return; }
                 string err = KiroUi.SendMessage(root, tab.Id, d.Text, placeholders);
-                if (err == "draft") { WaitLook(id, "the chat box holds a draft; not touching it", 300); return; }
+                if (err == "draft") { WaitLook(id, "the chat box holds a draft; not touching it", 300, "draft"); return; }
                 if (err.Length > 0) { WaitLook(id, "could not send: " + err + locked); return; }
                 d.Apply(st); sent++; pending.Remove(id);
                 Log(name + " : " + d.Why + "; sent " + d.Kind + locked);
+                Act("sent." + d.Kind, id);
                 if (d.Kind == "queued")
                 {
                     RemoveQueuedFirst(id); attention.Remove(id);
@@ -402,7 +429,7 @@ namespace KiroAutoContinue
                 double win = cfg.Dbl("restartWindowMinutes", 10);
                 DateTime since = ks.Value.AddMinutes(-win);
                 if (kiroStart != null && kiroStart.Value != DateTime.MinValue && kiroStart.Value < since) since = kiroStart.Value;
-                if (!first) Log("Kiro started at " + ks.Value.ToString("HH:mm:ss"));
+                if (!first) { Log("Kiro started at " + ks.Value.ToString("HH:mm:ss")); Act("kiro.restart"); }
                 if (!first || (DateTime.Now - ks.Value).TotalMinutes <= win) AddRestartCuts(since, ks.Value);
             }
             if (ks != null) kiroStart = ks;
@@ -410,7 +437,12 @@ namespace KiroAutoContinue
 
         void CheckKeepAwake()
         {
-            if (!cfg.Bool("keepAwake.enabled", true)) return;
+            if (!cfg.Bool("keepAwake.enabled", true))
+            {
+                // switched off in the window while it was holding Windows awake: let go now
+                if (awake) { Native.KeepAwake(false); awake = false; Log("letting Windows sleep again: keeping awake was switched off"); }
+                return;
+            }
             if ((DateTime.Now - awakeAt).TotalSeconds < 60) return;
             awakeAt = DateTime.Now;
             bool on = Records.AnyWorking(Records.GetSessionFiles(), cfg.Dbl("keepAwake.minutes", 60));

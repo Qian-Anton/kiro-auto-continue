@@ -3,6 +3,10 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
+    <!-- the window is WPF (vector layout, sharp and roomy at any display scale); the tray icon is WinForms.
+         Both are part of .NET Framework 4.8, which Windows 10 and 11 ship with. -->
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
     <LangVersion>latest</LangVersion>
     <AssemblyName>KiroAutoContinue</AssemblyName>
     <RootNamespace>KiroAutoContinue</RootNamespace>
@@ -11,6 +15,7 @@
     <Deterministic>true</Deterministic>
     <DebugType>embedded</DebugType>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <Product>Kiro Auto Continue</Product>
     <Company>Yuntao Qian</Company>
     <AssemblyTitle>Kiro Auto Continue</AssemblyTitle>
@@ -22,18 +27,20 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="System.Windows.Forms" />
+    <!-- WPF, UI Automation and WinForms come with UseWPF / UseWindowsForms -->
     <Reference Include="System.Drawing" />
     <Reference Include="System.Web.Extensions" />
-    <Reference Include="UIAutomationClient" />
-    <Reference Include="UIAutomationTypes" />
-    <Reference Include="WindowsBase" />
+    <!-- System.Web.Extensions needs it; the XAML compiler wants every such assembly listed -->
+    <Reference Include="System.Web" />
     <Reference Include="Accessibility" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- the defaults are baked into the exe, so the distributable is a single file -->
     <EmbeddedResource Include="config.default.json" />
+    <!-- drawn by make-icon.ps1; also the window's and the tray's icon -->
+    <Resource Include="app.ico" />
+    <None Remove="make-icon.ps1" />
   </ItemGroup>
 
 </Project>

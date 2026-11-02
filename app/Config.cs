@@ -20,13 +20,27 @@ namespace KiroAutoContinue
         public string QueuePath { get { return Path.Combine(DataDir, "queue.json"); } }
         public string AllowPath { get { return Path.Combine(DataDir, "remote-allow.json"); } }
         public string ReportStatePath { get { return Path.Combine(DataDir, "report-state.json"); } }
+        public string ActivityPath { get { return Path.Combine(DataDir, "activity.jsonl"); } }
 
         private Config() { }
+
+        // For tests only: KAC_DATA_DIR puts the settings, logs and state somewhere else, and InstanceSuffix gives
+        // that copy its own single-instance lock, so it can run next to the real one.
+        static string DataDirOverride() { return Environment.GetEnvironmentVariable("KAC_DATA_DIR"); }
+        public static string InstanceSuffix()
+        {
+            string o = DataDirOverride();
+            if (string.IsNullOrEmpty(o)) return "";
+            uint h = 2166136261;
+            foreach (char ch in Path.GetFullPath(o).ToLowerInvariant()) { h ^= ch; h *= 16777619; }
+            return "." + h.ToString("x8");
+        }
 
         public static Config Load()
         {
             var c = new Config();
-            c.DataDir = Path.Combine(
+            string over = DataDirOverride();
+            c.DataDir = !string.IsNullOrEmpty(over) ? Path.GetFullPath(over) : Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KiroAutoContinue");
             Directory.CreateDirectory(c.DataDir);
 
@@ -87,12 +101,13 @@ namespace KiroAutoContinue
             if (File.Exists(path)) File.Replace(tmp, path, null); else File.Move(tmp, path);
         }
 
-        // --- typed access to the merged tree ---
+        // --- typed access to the merged tree; "a.b" goes down nested objects (no key has a dot in it) ---
         public object At(params string[] keys) { return Json.At(Root, keys); }
-        public int Int(string key, int fb = 0) { return Json.Int(Json.At(Root, key), fb); }
-        public double Dbl(string key, double fb = 0) { return Json.Dbl(Json.At(Root, key), fb); }
-        public bool Bool(string key, bool fb = false) { return Json.Bool(Json.At(Root, key), fb); }
-        public string Str(string key, string fb = "") { return Json.Str(Json.At(Root, key), fb); }
+        object Dotted(string key) { return Json.At(Root, key.Split('.')); }
+        public int Int(string key, int fb = 0) { return Json.Int(Dotted(key), fb); }
+        public double Dbl(string key, double fb = 0) { return Json.Dbl(Dotted(key), fb); }
+        public bool Bool(string key, bool fb = false) { return Json.Bool(Dotted(key), fb); }
+        public string Str(string key, string fb = "") { return Json.Str(Dotted(key), fb); }
 
         // The word tree for a language (words.zh / words.en), falling back to en.
         public object Words(string lang)

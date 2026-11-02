@@ -35,15 +35,17 @@ namespace KiroAutoContinue
             catch { }
             return m;
         }
+        readonly Dictionary<string, int> tempNumbers = new Dictionary<string, int>();   // readOnly: numbers not saved
         int GetNumber(string id)
         {
             var m = GetNumbers();
+            foreach (var kv in tempNumbers) if (!m.ContainsKey(kv.Key)) m[kv.Key] = kv.Value;
             int v;
             if (!m.TryGetValue(id, out v))
             {
                 int max = 0; foreach (int x in m.Values) if (x > max) max = x;
                 v = max + 1; m[id] = v;
-                WriteJsonFile(cfg.NumbersPath, m);
+                if (readOnly) tempNumbers[id] = v; else WriteJsonFile(cfg.NumbersPath, m);
             }
             return v;
         }
@@ -194,11 +196,12 @@ namespace KiroAutoContinue
             return string.Join("\n", lines);
         }
 
-        string SendRemoteText(SessionFile f, Turn turn, string text)
+        // waitIdle: false for a click in the window (you are in this window, not typing into Kiro).
+        string SendRemoteText(SessionFile f, Turn turn, string text, bool waitIdle = true)
         {
             var info = Records.GetSessionInfo(f.Dir);
             if (info == null) return "cannot read its session.json";
-            if (!WaitRemoteIdle()) return "busy";
+            if (waitIdle && !WaitRemoteIdle()) return "busy";
             var found = KiroUi.FindSessionTab(info);
             if (found.Count == 0) return "noTab";
             if (found.Count > 1) return "twoTabs";
@@ -215,11 +218,11 @@ namespace KiroAutoContinue
             finally { if (back != null && back.Id != tab.Id) KiroUi.ShowTab(root, back.Id); }
         }
 
-        string StopRemoteSession(SessionFile f, Turn turn)
+        string StopRemoteSession(SessionFile f, Turn turn, bool waitIdle = true)
         {
             var info = Records.GetSessionInfo(f.Dir);
             if (info == null) return "cannot read its session.json";
-            if (!WaitRemoteIdle()) return "busy";
+            if (waitIdle && !WaitRemoteIdle()) return "busy";
             var found = KiroUi.FindSessionTab(info);
             if (found.Count == 0) return "noTab";
             if (found.Count > 1) return "twoTabs";
@@ -271,6 +274,7 @@ namespace KiroAutoContinue
                 if (!isSend) { SendReply(req, sid, Fmt(rw, "working", vars)); return; }
                 int k = AddQueued(id, text, from);
                 Log(name + " : a message from your phone waits for this turn to finish (" + k + " waiting): [" + Policy.Short(text, 60) + "]");
+                Act("phone.queue", id);
                 SendReply(req, sid, Fmt(rw, "queued", new Dictionary<string, string> { { "n", n.ToString() }, { "k", k.ToString() } }));
                 return;
             }
@@ -281,12 +285,14 @@ namespace KiroAutoContinue
             {
                 var st = StateOf(id); st.Tries = 0; pending.Remove(id); attention.Remove(id);
                 Log(name + " : sent from your phone: [" + Policy.Short(text, 60) + "]");
+                Act("phone.send", id);
                 SendReply(req, sid, Fmt(rw, "sent", vars));
             }
             else if (why == "working" && isSend)
             {
                 int k = AddQueued(id, text, from);
                 Log(name + " : a message from your phone waits for this turn to finish (" + k + " waiting): [" + Policy.Short(text, 60) + "]");
+                Act("phone.queue", id);
                 SendReply(req, sid, Fmt(rw, "queued", new Dictionary<string, string> { { "n", n.ToString() }, { "k", k.ToString() } }));
             }
             else
@@ -307,7 +313,7 @@ namespace KiroAutoContinue
             if (turn.Ended) { SendReply(req, sid, Fmt(rw, "notRunning", vars)); return; }
             SendReply(req, sid, Fmt(rw, "stopping", vars), false);
             string why = StopRemoteSession(f, turn);
-            if (why == "") { Log(name + " : stopped from your phone"); SendReply(req, sid, Fmt(rw, "stopped", vars)); }
+            if (why == "") { Log(name + " : stopped from your phone"); Act("phone.stop", f.Id); SendReply(req, sid, Fmt(rw, "stopped", vars)); }
             else { Log(name + " : not stopped from your phone: " + why); SendReply(req, sid, Fmt(rw, "notStopped", V("why", Why(rw, why)))); }
         }
 
@@ -335,6 +341,7 @@ namespace KiroAutoContinue
                 return;
             }
             Log("remote: opened a new session in " + c.Workspace + " from your phone: [" + Policy.Short(c.Text, 60) + "]");
+            Act("phone.new", "", c.Workspace);
             if (r.Id.Length > 0) SendReply(req, sid, Fmt(rw, "newOpened", V("n", GetNumber(r.Id).ToString())));
             else SendReply(req, sid, Fmt(rw, "newOpenedNoNumber", V("ws", c.Workspace)));
         }
@@ -365,6 +372,7 @@ namespace KiroAutoContinue
                     {
                         AddPaired(from); pairCode = null;
                         Log("remote: paired with " + from + "; only paired accounts are obeyed");
+                        Act("phone.paired", "", from);
                         SendReply(req, sid, Json.Str(Json.At(rw, "paired")));
                     }
                     else
@@ -500,6 +508,9 @@ namespace KiroAutoContinue
             {
                 var info = Records.GetSessionInfo(f.Dir); if (info == null) continue;
                 var t = ReadTurn(f.Dir); SetRestartCutNow(t);
+                int qn = GetQueued(f.Id).Count;
+                Pending pd;
+                bool planned = pending.TryGetValue(f.Id, out pd) && pd.Plan.Length > 0;
                 var row = new SessionRow
                 {
                     Id = f.Id,
@@ -507,12 +518,20 @@ namespace KiroAutoContinue
                     Workspace = info.Workspace,
                     Title = info.Title,
                     State = Remote.TurnState(t, rw, DateTime.Now),
+                    Kind = !t.Ended ? "running" : t.Restart ? "restart" : t.Stop == "error" ? "cut" : t.Cancelled ? "stopped" : "done",
                     Running = !t.Ended,
-                    Pending = pending.ContainsKey(f.Id),
-                    Queued = GetQueued(f.Id).Count > 0
+                    Pending = planned,
+                    Plan = planned ? pd.Plan : "",
+                    Wait = planned ? pd.Wait : "",
+                    Due = planned ? pd.Due : DateTime.MinValue,
+                    QueuedCount = qn,
+                    Queued = qn > 0
                 };
                 string code;
-                if (attention.TryGetValue(f.Id, out code) && code != null) { row.NeedsYou = code != "done"; row.Need = Json.Str(Json.At(rw, "need", code)); }
+                if (attention.TryGetValue(f.Id, out code) && code != null)
+                {
+                    row.Attention = code; row.NeedsYou = code != "done"; row.Need = Json.Str(Json.At(rw, "need", code));
+                }
                 SessionState st;
                 if (state.TryGetValue(f.Id, out st) && st.Mode != null) row.UntilDone = true;
                 rows.Add(row);
@@ -523,17 +542,23 @@ namespace KiroAutoContinue
         public void RequestContinue(string id) { Post(() => ManualContinue(id)); }
         public void RequestStop(string id) { Post(() => ManualStop(id)); }
 
+        // A click in the window: no wait for an idle keyboard (you are in this window, not typing into Kiro).
         void ManualContinue(string id)
         {
             var f = Records.GetSessionFiles().FirstOrDefault(x => x.Id == id);
             if (f == null) return;
             string name = SessionLabel(f);
             var turn = ReadTurn(f.Dir); SetRestartCutNow(turn);
-            if (!turn.Ended) { Log(name + " : still running; not continuing from the window"); return; }
+            if (!turn.Ended) { Log(name + " : still running; not continuing from the window"); Act("window.notContinued", id, Why(Rw(), "working")); return; }
             string text = Policy.ManualContinue(turn, cfg);
-            string why = SendRemoteText(f, turn, text);
-            if (why == "") { var st = StateOf(id); st.Tries = 0; pending.Remove(id); attention.Remove(id); Log(name + " : continued from the window"); }
-            else Log(name + " : not continued: " + why);
+            string why = SendRemoteText(f, turn, text, false);
+            if (why == "")
+            {
+                var st = StateOf(id); st.Tries = 0; pending.Remove(id); attention.Remove(id);
+                Log(name + " : continued from the window");
+                Act("window.continue", id);
+            }
+            else { Log(name + " : not continued: " + why); Act("window.notContinued", id, Why(Rw(), why)); }
         }
 
         void ManualStop(string id)
@@ -542,9 +567,47 @@ namespace KiroAutoContinue
             if (f == null) return;
             string name = SessionLabel(f);
             var turn = ReadTurn(f.Dir); SetRestartCutNow(turn);
-            if (turn.Ended) { Log(name + " : not running"); return; }
-            string why = StopRemoteSession(f, turn);
-            Log(why == "" ? name + " : stopped from the window" : name + " : not stopped: " + why);
+            if (turn.Ended) { Log(name + " : not running"); Act("window.notStopped", id, Why(Rw(), "notRunning")); return; }
+            string why = StopRemoteSession(f, turn, false);
+            if (why == "") { Log(name + " : stopped from the window"); Act("window.stop", id); }
+            else { Log(name + " : not stopped: " + why); Act("window.notStopped", id, Why(Rw(), why)); }
+        }
+
+        // --preview only: one read-only look at the records for the window. With sample, made-up states on the
+        // listed sessions and a few made-up recent lines, so every style shows. Nothing is sent or written.
+        public void PreviewSeed(bool sample)
+        {
+            BuildSnapshot();
+            if (!sample) return;
+            object rw = Rw();
+            var rows = LastSnapshot.ToList();
+            for (int i = rows.Count; i < 7; i++)
+                rows.Add(new SessionRow { Id = "sample" + i, Number = 90 + i, Workspace = "my_project", Title = "Sample session " + i });
+            DateTime now = DateTime.Now;
+            Func<string, int, string> st = (k, ago) => Policy.FormatText(Json.At(rw, "state", k),
+                new Dictionary<string, string> { { "at", now.AddMinutes(-ago).ToString("HH:mm") } }).Trim();
+            Action<SessionRow, string, int> setKind = (r, k, ago) =>
+            {
+                r.Kind = k; r.Running = k == "running"; r.State = st(k, ago);
+                r.Pending = false; r.NeedsYou = false; r.Need = ""; r.Attention = ""; r.QueuedCount = 0; r.Queued = false; r.UntilDone = false;
+            };
+            setKind(rows[0], "running", 0);
+            setKind(rows[1], "cut", 1); rows[1].Pending = true; rows[1].Plan = "resume"; rows[1].Due = now.AddSeconds(130);
+            setKind(rows[2], "cut", 14); rows[2].NeedsYou = true; rows[2].Attention = "outOfCredits"; rows[2].Need = Json.Str(Json.At(rw, "need", "outOfCredits"));
+            setKind(rows[3], "done", 9); rows[3].Attention = "done"; rows[3].Need = Json.Str(Json.At(rw, "need", "done"));
+            setKind(rows[4], "done", 2); rows[4].Pending = true; rows[4].Plan = "push"; rows[4].Wait = "idle"; rows[4].UntilDone = true;
+            setKind(rows[5], "running", 0); rows[5].QueuedCount = 1; rows[5].Queued = true; rows[5].UntilDone = true;
+            setKind(rows[6], "stopped", 41);
+            LastSnapshot = rows;
+            Action<string, SessionRow, int, string> add = (k, r, ago, d) => activities.Add(new Activity
+            {
+                At = now.AddMinutes(-ago), Kind = k, Id = r != null ? r.Id : "", Number = r != null ? r.Number : 0,
+                Title = r != null ? r.Title : "", Detail = d ?? ""
+            });
+            add("paused", null, 95, ""); add("resumed", null, 93, ""); add("kiro.restart", null, 70, "");
+            add("finished", rows[3], 52, ""); add("window.continue", rows[6], 41, ""); add("phone.send", rows[5], 30, "");
+            add("need.outOfCredits", rows[2], 14, ""); add("done", rows[3], 9, ""); add("sent.push", rows[4], 5, "");
+            add("window.notContinued", rows[6], 3, Why(rw, "noTab")); add("sent.resume", rows[1], 1, "");
         }
     }
 }

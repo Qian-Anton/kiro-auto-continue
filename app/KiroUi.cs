@@ -328,6 +328,53 @@ namespace KiroAutoContinue
             return "pressed send twice; the text is still in the box";
         }
 
+        // Show a session's tab and check it is the right one: for an ended turn, wait for the view to settle;
+        // for a running one, wait for the switch and that its last message shows (its panel keeps changing).
+        // "" once shown, else "notShown".
+        public static string OpenRemoteTab(AutomationElement root, KiroTab tab, bool ended, string lastUser)
+        {
+            if (ended)
+            {
+                if (!OpenTab(root, tab.Id, 40)) return "notShown";
+            }
+            else if (!tab.Selected)
+            {
+                string before = ViewMark(root);
+                if (!ShowTab(root, tab.Id)) return "notShown";
+                bool changed = false;
+                for (int i = 0; i < 40 && !changed; i++) { Thread.Sleep(500); changed = ViewMark(root) != before; }
+                if (!changed) return "notShown";
+            }
+            if (!WaitShownUser(root, lastUser, 20)) return "notShown";
+            return "";
+        }
+
+        // Press "New session" once, wait for the new tab and its empty panel, type text, then show the tab that
+        // was open before. "" once typed, else why not. One press only: a second would open a second session
+        // when the first tab shows up late.
+        public static string OpenNewSession(AutomationElement root, string text, List<string> placeholders)
+        {
+            var back = GetTabs(root).FirstOrDefault(t => t.Selected);
+            var before = new HashSet<string>();
+            foreach (var t in GetTabs(root)) before.Add(t.Id);
+            if (!NewSession(root)) return "noButton";
+            KiroTab nw = null;
+            for (int i = 0; i < 80 && nw == null; i++) { Thread.Sleep(500); nw = GetTabs(root).FirstOrDefault(t => !before.Contains(t.Id)); }
+            if (nw == null) return "newTab";
+            try
+            {
+                if (!ShowTab(root, nw.Id)) return "newTab";
+                bool ready = false;
+                for (int i = 0; i < 60 && !ready; i++) { Thread.Sleep(500); string m = ViewMark(root); ready = m == "none" || m.StartsWith("0|"); }
+                if (!ready) return "notReady";
+                Thread.Sleep(1000);
+                string err = SendMessage(root, nw.Id, text, placeholders);
+                if (err.Length > 0) return err;
+                return "";
+            }
+            finally { if (back != null) ShowTab(root, back.Id); }
+        }
+
         // Stop the running turn of the shown session with its Cancel button. "" once its tab leaves Working.
         public static string StopTurn(AutomationElement root, string id)
         {

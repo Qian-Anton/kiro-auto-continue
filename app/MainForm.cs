@@ -7,8 +7,8 @@ using Microsoft.Win32;
 
 namespace KiroAutoContinue
 {
-    // The window: three tabs (sessions, phone, settings). All Chinese text comes from words.<lang>.ui in the
-    // config, so this file stays ASCII. Reads the watcher's snapshot on a timer; posts actions to the watcher.
+    // The window: three tabs (sessions, phone, settings). Laid out with TableLayoutPanel rows so every label
+    // sizes to its own text and nothing overlaps at any DPI. All Chinese text comes from words.<lang>.ui.
     internal sealed class MainForm : Form
     {
         readonly Config cfg;
@@ -19,17 +19,15 @@ namespace KiroAutoContinue
         TabControl tabs;
         TabPage pSess, pPhone, pSet;
 
-        // sessions
         Label sessStatus; Button pauseBtn; ListView list; ColumnHeader colNum, colName, colState;
         Button stopBtn, contBtn; TextBox logBox;
-        // phone
         Label notifyTitle, notifyHelp, remoteTitle, remoteHelp, testState, remoteState, pairLabel, botIdLbl, secretLbl;
         TextBox webhook, botId, secret; Button testBtn, connectBtn;
         CheckBox evNeedsYou, evDone, evMorning;
-        // settings
         CheckBox startChk, awakeChk; Label idleLbl, idleSuffix, langLbl, localNote; NumericUpDown idleNum; ComboBox langCombo;
 
         Timer timer;
+        static readonly Color Accent = Color.FromArgb(30, 60, 160);
 
         public MainForm(Config cfg, Watcher watcher)
         {
@@ -56,19 +54,19 @@ namespace KiroAutoContinue
             base.OnFormClosed(e);
         }
 
-        const int Pad = 16;
-        const int Wide = 868;   // content width inside the 900 client
-
         void Build()
         {
             AutoScaleMode = AutoScaleMode.Dpi;
-            Font = new Font("Microsoft YaHei UI", 9f);
+            Font = new Font("Microsoft YaHei UI", 9.75f);
+            BackColor = Color.White;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(900, 620);
-            MinimumSize = new Size(720, 520);
+            ClientSize = new Size(960, 720);
+            MinimumSize = new Size(740, 560);
 
             tabs = new TabControl { Dock = DockStyle.Fill };
-            pSess = new TabPage(); pPhone = new TabPage(); pSet = new TabPage();
+            pSess = new TabPage { BackColor = Color.White, UseVisualStyleBackColor = true };
+            pPhone = new TabPage { BackColor = Color.White, UseVisualStyleBackColor = true };
+            pSet = new TabPage { BackColor = Color.White, UseVisualStyleBackColor = true };
             tabs.TabPages.AddRange(new[] { pSess, pPhone, pSet });
             Controls.Add(tabs);
 
@@ -77,108 +75,166 @@ namespace KiroAutoContinue
             BuildSettings();
         }
 
+        // --- layout helpers ---
+        TableLayoutPanel Column(TabPage page)
+        {
+            var t = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                AutoScroll = true,
+                Padding = new Padding(20, 10, 20, 14),
+                GrowStyle = TableLayoutPanelGrowStyle.AddRows,
+                BackColor = Color.White
+            };
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            page.Controls.Add(t);
+            return t;
+        }
+        static void Add(TableLayoutPanel t, Control c)
+        {
+            int r = t.RowCount;
+            t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            t.Controls.Add(c, 0, r);
+            t.RowCount = r + 1;
+        }
+        Label Header() { return new Label { AutoSize = true, Dock = DockStyle.Top, Margin = new Padding(0, 10, 0, 3), Font = new Font(Font.FontFamily, 11f, FontStyle.Bold) }; }
+        Label Hint() { return new Label { AutoSize = true, Dock = DockStyle.Top, Margin = new Padding(0, 0, 0, 4), ForeColor = Color.DimGray }; }
+        static CheckBox Chk() { return new CheckBox { AutoSize = true, Margin = new Padding(0, 2, 0, 2) }; }
+        static Panel Spacer(int h) { return new Panel { Height = h, Margin = new Padding(0), Dock = DockStyle.Top }; }
+
         void BuildSessions()
         {
-            var top = new Panel { Dock = DockStyle.Top, Height = 42, Padding = new Padding(Pad, 10, Pad, 4) };
-            sessStatus = new Label { Dock = DockStyle.Fill, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Font = new Font(Font, FontStyle.Bold) };
-            pauseBtn = new Button { Dock = DockStyle.Right, Width = 120 };
+            var top = new Panel { Dock = DockStyle.Top, Height = 44, Padding = new Padding(20, 12, 20, 6), BackColor = Color.White };
+            sessStatus = new Label { Dock = DockStyle.Fill, AutoSize = false, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft, Font = new Font(Font.FontFamily, 10.5f, FontStyle.Bold) };
+            pauseBtn = new Button { Dock = DockStyle.Right, Width = 110, FlatStyle = FlatStyle.System };
             pauseBtn.Click += (s, e) => { watcher.Pause(!watcher.Paused); Tick(); };
             top.Controls.Add(sessStatus);
             top.Controls.Add(pauseBtn);
 
-            var bottom = new Panel { Dock = DockStyle.Bottom, Height = 200, Padding = new Padding(Pad, 0, Pad, 12) };
-            var btnRow = new Panel { Dock = DockStyle.Top, Height = 42 };
-            contBtn = new Button { Location = new Point(0, 6), Size = new Size(110, 30), Enabled = false };
-            stopBtn = new Button { Location = new Point(120, 6), Size = new Size(90, 30), Enabled = false };
+            var bottom = new Panel { Dock = DockStyle.Bottom, Height = 196, Padding = new Padding(20, 0, 20, 14), BackColor = Color.White };
+            var btnRow = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = Color.White };
+            contBtn = new Button { Location = new Point(0, 8), Size = new Size(104, 30), Enabled = false, FlatStyle = FlatStyle.System };
+            stopBtn = new Button { Location = new Point(114, 8), Size = new Size(84, 30), Enabled = false, FlatStyle = FlatStyle.System };
             contBtn.Click += (s, e) => { string id = SelectedId(); if (id != null) watcher.RequestContinue(id); };
             stopBtn.Click += (s, e) => { string id = SelectedId(); if (id != null) watcher.RequestStop(id); };
             btnRow.Controls.Add(contBtn);
             btnRow.Controls.Add(stopBtn);
-            logBox = new TextBox
-            {
-                Dock = DockStyle.Fill,
-                Multiline = true,
-                ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
-                BackColor = Color.White,
-                Font = new Font("Consolas", 8.5f)
-            };
+            logBox = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BackColor = Color.FromArgb(250, 250, 250), Font = new Font("Consolas", 8.5f), BorderStyle = BorderStyle.FixedSingle };
             bottom.Controls.Add(logBox);
             bottom.Controls.Add(btnRow);
 
-            list = new ListView
-            {
-                Dock = DockStyle.Fill,
-                View = View.Details,
-                FullRowSelect = true,
-                MultiSelect = false,
-                HideSelection = false
-            };
+            list = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BorderStyle = BorderStyle.None };
             colNum = list.Columns.Add("#", 46);
-            colName = list.Columns.Add("", 540);
-            colState = list.Columns.Add("", 232);
+            colName = list.Columns.Add("", 470);
+            colState = list.Columns.Add("", 200);
             list.SelectedIndexChanged += (s, e) => UpdateButtons();
+            list.Resize += (s, e) => { int w = list.ClientSize.Width - colNum.Width - colState.Width - 2; if (w > 140) colName.Width = w; };
 
-            pSess.Controls.Add(list);
+            var host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(20, 8, 20, 8), BackColor = Color.White };
+            host.Controls.Add(list);
+
+            pSess.Controls.Add(host);
             pSess.Controls.Add(bottom);
             pSess.Controls.Add(top);
-            pSess.Padding = new Padding(Pad, 8, Pad, 8);
         }
 
         void BuildPhone()
         {
-            var l = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            notifyTitle = new Label { Location = new Point(Pad, 14), AutoSize = true, Font = new Font(Font, FontStyle.Bold) };
-            notifyHelp = new Label { Location = new Point(Pad, 40), Size = new Size(Wide, 22), Anchor = l, ForeColor = Color.DimGray };
-            webhook = new TextBox { Location = new Point(Pad, 70), Size = new Size(Wide - 160, 26), Anchor = l };
-            testBtn = new Button { Location = new Point(Pad + Wide - 148, 69), Size = new Size(148, 28), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            var t = Column(pPhone);
+            notifyTitle = Header();
+            notifyHelp = Hint();
+
+            var wrow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2, Margin = new Padding(0, 2, 0, 2) };
+            wrow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            wrow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            wrow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            webhook = new TextBox { Dock = DockStyle.Fill, Margin = new Padding(0, 2, 8, 2) };
+            testBtn = new Button { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(12, 4, 12, 4), Margin = new Padding(0), FlatStyle = FlatStyle.System };
             testBtn.Click += (s, e) => DoTestNotice();
-            testState = new Label { Location = new Point(Pad, 102), Size = new Size(Wide, 20), Anchor = l, ForeColor = Color.DimGray };
-            evNeedsYou = new CheckBox { Location = new Point(Pad, 128), AutoSize = true };
-            evDone = new CheckBox { Location = new Point(Pad, 156), AutoSize = true };
-            evMorning = new CheckBox { Location = new Point(Pad, 184), AutoSize = true };
+            wrow.Controls.Add(webhook, 0, 0);
+            wrow.Controls.Add(testBtn, 1, 0);
+
+            testState = Hint();
+            evNeedsYou = Chk(); evDone = Chk(); evMorning = Chk();
             evNeedsYou.CheckedChanged += (s, e) => SaveEvents();
             evDone.CheckedChanged += (s, e) => SaveEvents();
             evMorning.CheckedChanged += (s, e) => { if (!loading) Save("report.time", evMorning.Checked ? "08:00" : ""); };
 
-            remoteTitle = new Label { Location = new Point(Pad, 226), AutoSize = true, Font = new Font(Font, FontStyle.Bold) };
-            remoteHelp = new Label { Location = new Point(Pad, 252), Size = new Size(Wide, 40), Anchor = l, ForeColor = Color.DimGray };
-            botIdLbl = new Label { Location = new Point(Pad, 302), AutoSize = true };
-            botId = new TextBox { Location = new Point(Pad + 80, 299), Size = new Size(Wide - 80, 26), Anchor = l };
-            secretLbl = new Label { Location = new Point(Pad, 334), AutoSize = true };
-            secret = new TextBox { Location = new Point(Pad + 80, 331), Size = new Size(Wide - 80, 26), Anchor = l, UseSystemPasswordChar = true };
-            connectBtn = new Button { Location = new Point(Pad, 366), Size = new Size(100, 30) };
-            connectBtn.Click += (s, e) => DoConnect();
-            remoteState = new Label { Location = new Point(Pad + 112, 372), AutoSize = true, ForeColor = Color.DimGray };
-            pairLabel = new Label { Location = new Point(Pad, 406), Size = new Size(Wide, 40), Anchor = l, ForeColor = Color.FromArgb(30, 60, 160) };
+            remoteTitle = Header();
+            remoteHelp = Hint();
+            botIdLbl = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 10, 0), Text = "Bot ID" };
+            botId = new TextBox { Dock = DockStyle.Fill, Margin = new Padding(0, 2, 0, 2) };
+            var brow = LabelRow(botIdLbl, botId);
+            secretLbl = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 10, 0), Text = "Secret" };
+            secret = new TextBox { Dock = DockStyle.Fill, Margin = new Padding(0, 2, 0, 2), UseSystemPasswordChar = true };
+            var srow = LabelRow(secretLbl, secret);
 
-            pPhone.Controls.AddRange(new Control[] { notifyTitle, notifyHelp, webhook, testBtn, testState, evNeedsYou, evDone, evMorning,
-                remoteTitle, remoteHelp, botIdLbl, botId, secretLbl, secret, connectBtn, remoteState, pairLabel });
+            connectBtn = new Button { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(16, 4, 16, 4), Margin = new Padding(0, 6, 0, 0), FlatStyle = FlatStyle.System };
+            connectBtn.Click += (s, e) => DoConnect();
+            remoteState = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(14, 12, 0, 0), ForeColor = Color.DimGray };
+            var crow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Margin = new Padding(0, 2, 0, 2) };
+            crow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            crow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            crow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            crow.Controls.Add(connectBtn, 0, 0);
+            crow.Controls.Add(remoteState, 1, 0);
+
+            pairLabel = new Label { AutoSize = true, Dock = DockStyle.Top, Margin = new Padding(0, 10, 0, 0), ForeColor = Accent };
+
+            Add(t, notifyTitle); Add(t, notifyHelp); Add(t, wrow); Add(t, testState);
+            Add(t, evNeedsYou); Add(t, evDone); Add(t, evMorning);
+            Add(t, Spacer(2));
+            Add(t, remoteTitle); Add(t, remoteHelp); Add(t, brow); Add(t, srow); Add(t, crow); Add(t, pairLabel);
+        }
+
+        TableLayoutPanel LabelRow(Control label, Control field)
+        {
+            var r = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Margin = new Padding(0, 2, 0, 2) };
+            r.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            r.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            r.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            r.Controls.Add(label, 0, 0);
+            r.Controls.Add(field, 1, 0);
+            return r;
         }
 
         void BuildSettings()
         {
-            startChk = new CheckBox { Location = new Point(Pad, 22), AutoSize = true };
+            var t = Column(pSet);
+            startChk = Chk();
             startChk.CheckedChanged += (s, e) => { if (!loading) { SetStartup(startChk.Checked); Save("startWithWindows", startChk.Checked); } };
-            awakeChk = new CheckBox { Location = new Point(Pad, 56), AutoSize = true };
+            awakeChk = Chk();
             awakeChk.CheckedChanged += (s, e) => { if (!loading) Save("keepAwake.enabled", awakeChk.Checked); };
-            idleLbl = new Label { Location = new Point(Pad, 96), AutoSize = true };
-            idleNum = new NumericUpDown { Location = new Point(Pad + 170, 93), Size = new Size(76, 26), Minimum = 10, Maximum = 1800, Increment = 10 };
-            idleNum.ValueChanged += (s, e) => { if (!loading) Save("idleSeconds", (int)idleNum.Value); };
-            idleSuffix = new Label { Location = new Point(Pad + 256, 96), AutoSize = true };
-            langLbl = new Label { Location = new Point(Pad, 134), AutoSize = true };
-            langCombo = new ComboBox { Location = new Point(Pad + 170, 131), Size = new Size(160, 26), DropDownStyle = ComboBoxStyle.DropDownList };
-            langCombo.SelectedIndexChanged += (s, e) => OnLangChanged();
-            localNote = new Label { Location = new Point(Pad, 180), Size = new Size(Wide, 40), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, ForeColor = Color.DimGray };
 
-            pSet.Controls.AddRange(new Control[] { startChk, awakeChk, idleLbl, idleNum, idleSuffix, langLbl, langCombo, localNote });
+            idleLbl = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 8, 0) };
+            idleNum = new NumericUpDown { Width = 78, Minimum = 10, Maximum = 1800, Increment = 10, Margin = new Padding(0, 3, 8, 3), TextAlign = HorizontalAlignment.Center };
+            idleNum.ValueChanged += (s, e) => { if (!loading) Save("idleSeconds", (int)idleNum.Value); };
+            idleSuffix = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 0, 0) };
+            var irow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3, Margin = new Padding(0, 10, 0, 2) };
+            for (int i = 0; i < 3; i++) irow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            irow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            irow.Controls.Add(idleLbl, 0, 0); irow.Controls.Add(idleNum, 1, 0); irow.Controls.Add(idleSuffix, 2, 0);
+
+            langLbl = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 12, 0) };
+            langCombo = new ComboBox { Width = 170, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 3, 0, 3) };
+            langCombo.SelectedIndexChanged += (s, e) => OnLangChanged();
+            var lrow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Margin = new Padding(0, 4, 0, 2) };
+            lrow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            lrow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            lrow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            lrow.Controls.Add(langLbl, 0, 0); lrow.Controls.Add(langCombo, 1, 0);
+
+            localNote = new Label { AutoSize = true, Dock = DockStyle.Top, Margin = new Padding(0, 16, 0, 0), ForeColor = Color.DimGray };
+
+            Add(t, startChk); Add(t, awakeChk); Add(t, irow); Add(t, lrow); Add(t, localNote);
         }
 
         void Localize()
         {
             ui = Json.At(cfg.Words(cfg.UiLang()), "ui");
             Text = U("appTitle");
-            pSess.Text = U("tabSessions"); pPhone.Text = U("tabPhone"); pSet.Text = U("tabSettings");
+            pSess.Text = "  " + U("tabSessions") + "  "; pPhone.Text = "  " + U("tabPhone") + "  "; pSet.Text = "  " + U("tabSettings") + "  ";
             pauseBtn.Text = watcher.Paused ? U("resume") : U("pause");
             colNum.Text = U("colNum"); colName.Text = U("colSession"); colState.Text = U("colState");
             contBtn.Text = U("continueNow"); stopBtn.Text = U("stop");
@@ -187,7 +243,7 @@ namespace KiroAutoContinue
             testBtn.Text = U("testNotify");
             evNeedsYou.Text = U("evNeedsYou"); evDone.Text = U("evDone"); evMorning.Text = U("evMorning");
             remoteTitle.Text = U("remoteTitle"); remoteHelp.Text = U("remoteHelp");
-            botIdLbl.Text = "Bot ID"; secretLbl.Text = "Secret"; connectBtn.Text = U("connect");
+            connectBtn.Text = U("connect");
 
             startChk.Text = U("settingsStart"); awakeChk.Text = U("settingsAwake");
             string isd = U("settingsIdle"); int ix = isd.IndexOf("{n}");
@@ -319,7 +375,7 @@ namespace KiroAutoContinue
             int waiting = rows.Count(r => r.Pending || r.Queued);
             int needs = rows.Count(r => r.NeedsYou);
             string head = watcher.Paused ? U("paused") : U("running");
-            sessStatus.Text = head + "    " + Policy.FormatText(U("summary"),
+            sessStatus.Text = head + "     " + Policy.FormatText(U("summary"),
                 new Dictionary<string, string> { { "sessions", rows.Count.ToString() }, { "waiting", waiting.ToString() }, { "needs", needs.ToString() } });
 
             string keep = SelectedId();
@@ -335,7 +391,8 @@ namespace KiroAutoContinue
                 it.SubItems.Add(r.State + tail);
                 it.Tag = r.Id;
                 if (r.NeedsYou) it.ForeColor = Color.FromArgb(176, 32, 32);
-                else if (r.Running) it.ForeColor = Color.FromArgb(24, 96, 24);
+                else if (r.Running) it.ForeColor = Color.FromArgb(24, 110, 40);
+                else it.ForeColor = Color.FromArgb(70, 70, 70);
                 if (r.Id == keep) it.Selected = true;
                 list.Items.Add(it);
             }

@@ -255,7 +255,8 @@ namespace KiroAutoContinue
             {
                 parts.Add(usage.Status);
                 parts.Add(usage.Credits.ToString("0.##", CultureInfo.InvariantCulture) + " credits");
-                parts.Add(Math.Round(usage.Ms / 1000.0).ToString("0", CultureInfo.InvariantCulture) + "s");
+                // formatting rounds a half second up, as the script's '{0:0}s' does (Math.Round would round 2.5 to 2)
+                parts.Add((usage.Ms / 1000.0).ToString("0", CultureInfo.InvariantCulture) + "s");
             }
             turn.Footer = string.Join(", ", parts.Where(p => !string.IsNullOrEmpty(p)));
             return turn;

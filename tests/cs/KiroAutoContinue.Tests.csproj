@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Unit tests for the exe's logic: the cases of tests\*.Tests.ps1, run against the C# code. A console exe with
+       no test framework (nothing more to download); it compiles the app's own logic files, so what is tested is
+       the very code that ships. Run tests\cs\run.ps1. ASCII only. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>KiroAutoContinue.Tests</AssemblyName>
+    <RootNamespace>KiroAutoContinue</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- build-time only: lets us target net48 without the Developer Pack installed -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- the logic under test, straight from app\ (the window, the watcher loop and the UI Automation code are not
+         in here: they need Kiro on screen, and are tried on the real thing) -->
+    <Compile Include="..\..\app\Json.cs;..\..\app\Config.cs;..\..\app\Records.cs;..\..\app\Policy.cs;..\..\app\Notify.cs;..\..\app\Report.cs;..\..\app\Remote.cs"
+             Link="app\%(Filename)%(Extension)" />
+    <!-- the defaults, embedded under the name Config.Load looks for in this assembly -->
+    <EmbeddedResource Include="..\..\app\config.default.json" LogicalName="$(AssemblyName).config.default.json" />
+  </ItemGroup>
+
+</Project>

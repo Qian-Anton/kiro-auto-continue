@@ -233,7 +233,11 @@ namespace KiroAutoContinue
                 string why = KiroUi.OpenRemoteTab(root, tab, turn.Ended, turn.Users.Count > 0 ? turn.Users[0] : "");
                 if (why.Length > 0) return why;
                 Thread.Sleep(1000);
-                return KiroUi.StopTurn(root, tab.Id);
+                string stop = KiroUi.StopTurn(root, tab.Id);
+                // its record is the surer sign: 11-04 a turn stopped at once (cancelled in the record), yet its tab
+                // still said Working 20 s later, and the stop was reported as failed
+                if (stop == "the tab still says Working" && ReadTurn(f.Dir).Ended) return "";
+                return stop;
             }
             finally { if (back != null && back.Id != tab.Id && KiroUi.IsShown(root, tab.Id)) KiroUi.ShowTab(root, back.Id); }
         }

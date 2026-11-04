@@ -152,7 +152,8 @@
           "noButton": "找不到新建会话的按钮",
           "newTab": "新会话的签没出来",
           "notReady": "新会话的面板没准备好",
-          "notRunning": "它没在跑"
+          "notRunning": "它没在跑",
+          "switched": "电脑上有人换了签，没动它"
         },
         "notAllowed": "还没配对，这台电脑不听你的。",
         "pairHint": "在电脑上 kiro-auto-continue 的窗口里找配对码，发「配对 码」。",
@@ -399,7 +400,8 @@
           "noButton": "no New session button",
           "newTab": "the new session's tab did not show up",
           "notReady": "the new session's panel was not ready",
-          "notRunning": "it is not running"
+          "notRunning": "it is not running",
+          "switched": "someone switched tabs on the PC; left it alone"
         },
         "notAllowed": "Not paired: this PC does not take commands from you.",
         "pairHint": "Find the pairing code in the kiro-auto-continue window, and send \"pair <code>\".",

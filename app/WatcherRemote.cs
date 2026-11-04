@@ -215,7 +215,7 @@ namespace KiroAutoContinue
                 string err = KiroUi.SendMessage(root, tab.Id, text, Json.StrArr(cfg.At("placeholders")));
                 return err == "draft" ? "draft" : err;
             }
-            finally { if (back != null && back.Id != tab.Id) KiroUi.ShowTab(root, back.Id); }
+            finally { if (back != null && back.Id != tab.Id && KiroUi.IsShown(root, tab.Id)) KiroUi.ShowTab(root, back.Id); }
         }
 
         string StopRemoteSession(SessionFile f, Turn turn, bool waitIdle = true)
@@ -235,7 +235,7 @@ namespace KiroAutoContinue
                 Thread.Sleep(1000);
                 return KiroUi.StopTurn(root, tab.Id);
             }
-            finally { if (back != null && back.Id != tab.Id) KiroUi.ShowTab(root, back.Id); }
+            finally { if (back != null && back.Id != tab.Id && KiroUi.IsShown(root, tab.Id)) KiroUi.ShowTab(root, back.Id); }
         }
 
         NewResult NewRemoteSession(string workspace, string text)

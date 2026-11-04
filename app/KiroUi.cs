@@ -138,25 +138,34 @@ namespace KiroAutoContinue
             return string.Join(sep, parts);
         }
 
-        // The newest user message the panel shows: everything between the newest "Kiro" label and the item before it.
+        // The newest user message the panel shows (which items hold it: Panel.UserItems). The list's children come
+        // in one call with their class and type cached; only the message's own items are read for text. "" when
+        // the panel changes under it: the callers look again.
         static string ShownUser(AutomationElement root)
         {
-            var content = ItemList(root);
-            if (content == null) return "";
-            var roles = content.FindAll(TreeScope.Children, ByClass("agent-message-role"));
-            if (roles.Count == 0) return "";
-            var parts = new List<string>();
-            AutomationElement p = roles[roles.Count - 1];
-            for (int i = 0; i < 80; i++)
+            try
             {
-                p = Walker.GetPreviousSibling(p);
-                if (p == null) break;
-                var c = p.Current; string cls = c.ClassName ?? "";
-                if (c.ControlType == ControlType.Image) continue;
-                if (c.ControlType == ControlType.Button || cls.Contains("kiro-checkpoint-bar") || cls.Contains("kiro-copy-more-options") || cls.Contains("agent-message-role")) break;
-                parts.Insert(0, TextOf(p, "\n"));
+                var content = ItemList(root);
+                if (content == null) return "";
+                var kids = new List<AutomationElement>();
+                var items = new List<PanelItem>();
+                var cr = new CacheRequest { TreeFilter = Automation.RawViewCondition };
+                cr.Add(AutomationElement.ClassNameProperty);
+                cr.Add(AutomationElement.ControlTypeProperty);
+                using (cr.Activate())
+                {
+                    foreach (AutomationElement k in content.FindAll(TreeScope.Children, Any))
+                    {
+                        kids.Add(k);
+                        var t = k.Cached.ControlType;
+                        items.Add(new PanelItem(k.Cached.ClassName, t != null ? t.ProgrammaticName.Replace("ControlType.", "") : ""));
+                    }
+                }
+                var parts = new List<string>();
+                foreach (int i in Panel.UserItems(items)) parts.Add(TextOf(kids[i], "\n"));
+                return string.Join("\n", parts);
             }
-            return string.Join("\n", parts);
+            catch (Exception) { return ""; }
         }
 
         static string ViewMark(AutomationElement root)
@@ -282,16 +291,29 @@ namespace KiroAutoContinue
             return true;
         }
 
+        // Is this tab the one shown? Asked again right before anything is typed or pressed: you may have switched
+        // tabs since (11-04: a stop meant for a test session pressed Cancel in the session the user had just gone
+        // back to; the chat box and the Cancel button are always the shown session's).
+        public static bool IsShown(AutomationElement root, string id)
+        {
+            try { var t = FindTab(root, id); return t != null && t.Selected; }
+            catch (Exception) { return false; }
+        }
+
         // Type text into the shown session's chat box and send it, then wait for its tab to say Working.
-        // "" once sent, otherwise why not. Never types over a draft (returns "draft").
+        // "" once sent, otherwise why not. Never types over a draft (returns "draft"), except a draft that is this
+        // very text (left there when you switched tabs between typing and sending): that is sent. "switched" when
+        // its tab is no longer the one shown.
         public static string SendMessage(AutomationElement root, string id, string text, List<string> placeholders)
         {
+            if (!IsShown(root, id)) return "switched";
             var inp = GetInput(root, placeholders);
             if (inp == null || inp.Editor == null) return "chat box not found";
-            if (!inp.Empty) return "draft";
             bool typed = false; string why = "";
+            if (!inp.Empty) { if (Holds(inp, text)) typed = true; else return "draft"; }
             for (int attempt = 0; attempt < 2 && !typed; attempt++)
             {
+                if (!IsShown(root, id)) return "switched";
                 string err = SetInputText(inp, text);
                 if (!string.IsNullOrEmpty(err)) why = err;
                 for (int i = 0; i < 30 && !typed; i++)
@@ -315,6 +337,7 @@ namespace KiroAutoContinue
                     if (!Holds(inp, text)) return "";       // the box emptied: it went out
                     if (!inp.SendEnabled) break;
                 }
+                if (!IsShown(root, id)) return "switched";
                 try { ((InvokePattern)inp.Send.GetCurrentPattern(InvokePattern.Pattern)).Invoke(); } catch { }
                 for (int i = 0; i < 30; i++)
                 {
@@ -372,15 +395,19 @@ namespace KiroAutoContinue
                 if (err.Length > 0) return err;
                 return "";
             }
-            finally { if (back != null) ShowTab(root, back.Id); }
+            // back to your tab, unless you went to another one meanwhile
+            finally { if (back != null && IsShown(root, nw.Id)) ShowTab(root, back.Id); }
         }
 
         // Stop the running turn of the shown session with its Cancel button. "" once its tab leaves Working.
+        // Only while its tab is still the one shown: Kiro has one Cancel button, the shown session's.
         public static string StopTurn(AutomationElement root, string id)
         {
+            if (!IsShown(root, id)) return "switched";
             var cond = new AndCondition(ByType(ControlType.Button), ByName("Cancel"));
             var all = root.FindAll(TreeScope.Descendants, cond);
             if (all.Count == 0) return "noCancel";
+            if (!IsShown(root, id)) return "switched";
             try { ((InvokePattern)all[all.Count - 1].GetCurrentPattern(InvokePattern.Pattern)).Invoke(); } catch { }
             for (int i = 0; i < 40; i++)
             {

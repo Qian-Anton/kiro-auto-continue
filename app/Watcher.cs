@@ -259,7 +259,8 @@ namespace KiroAutoContinue
             }
             finally
             {
-                if (back != null && back.Id != tab.Id) KiroUi.ShowTab(root, back.Id);
+                // back to your tab, unless you went to another one meanwhile
+                if (back != null && back.Id != tab.Id && KiroUi.IsShown(root, tab.Id)) KiroUi.ShowTab(root, back.Id);
             }
         }
 
@@ -313,6 +314,9 @@ namespace KiroAutoContinue
                 if (f == null) continue;
                 string label = SessionLabel(f);
                 Log(label + " : credits are back (" + byName + " finished a turn); continuing it");
+                // no longer "out of credits": the window shows it as about to be continued (11-04: it stayed red,
+                // and was counted both as waiting and as needing you)
+                attention.Remove(w);
                 pending[w] = new Pending { Dir = f.Dir, StopAt = DateTime.Now.AddMinutes(-10), Due = DateTime.Now.AddSeconds(cfg.Int("settleSeconds", 20)), CreditsBack = true };
             }
         }

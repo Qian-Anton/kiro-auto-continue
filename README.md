@@ -42,9 +42,12 @@ Read the agent's final report afterwards: it made decisions you would normally m
 
 ## Notices on your phone
 
-The easiest way is the WeCom bot in the next section: once you have paired with it, notices come from the bot in your chat with it, and that is where you send commands too.
+Notices can come two ways; set up one of them:
 
-For notices only, without a bot, use a WeCom group's message push: in the group, tap `…` at the top right, then Message push > Add, copy the webhook URL, paste it under "Notices" on the window's Phone page, and click "Send a test".
+- The WeCom bot in the next section: once you have paired with it, the bot sends you the notices, in the same chat where you send it commands.
+- A WeCom group's message push: the notices go to that group. In the group, tap `…` at the top right, then Message push > Add, copy the webhook URL, paste it under "Notices" on the window's Phone page, and click "Send a test".
+
+With both set up, the bot sends the notices and the group gets none. Only when WeCom refuses the bot (a wrong Bot ID or Secret) do they go to the group instead.
 
 You get a message when a session needs you (cut off three times in a row, out of credits, stuck in until-done) and when an until-done task is finished. At 8:00 every morning you also get a short summary of the last 12 hours. Each of the three can be switched off on the Phone page.
 

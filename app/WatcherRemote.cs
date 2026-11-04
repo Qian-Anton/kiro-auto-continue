@@ -474,11 +474,19 @@ namespace KiroAutoContinue
             return string.Join("\n", outp);
         }
 
-        string SendReport(string text)
+        string SendReport(string text) { return SendNotice(text); }
+
+        // A notice or the morning status, where Notify.Route says: the paired accounts through the bot, or the group.
+        // "" once sent (for the bot: queued; it goes out as soon as the bot is connected), else why not.
+        string SendNotice(string text)
         {
-            if (Json.Str(cfg.At("notify", "webhook")).Length > 0) return Notify.Send(cfg, text);
-            if (remote != null && Allowed().Count > 0) { SendPush("", text); return ""; }
-            return "no notify.webhook and no account paired with the bot";
+            bool paired = remote != null && Allowed().Count > 0;
+            bool hook = Json.Str(cfg.At("notify", "webhook")).Length > 0;
+            string route = Notify.Route(paired, remote != null && remote.AuthFailed, hook);
+            if (route == "bot") { SendPush("", Notify.LimitUtf8(text, 2000)); return ""; }
+            if (route == "group") return Notify.Send(cfg, text);
+            if (paired) return "the bot was refused its id and secret, and there is no notify.webhook";
+            return "no account paired with the bot and no notify.webhook";
         }
 
         void ReportCheck()

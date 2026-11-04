@@ -85,6 +85,13 @@ namespace KiroAutoContinue
             T.Check("not a WeCom webhook: not sent", () => Notify.Send(cfg, "x").Contains("not a WeCom webhook"));
             T.SetPath(cfg, "https://open.feishu.cn/open-apis/bot/v2/hook/abc", "notify", "webhook");
             T.Check("a Feishu webhook: not sent either", () => Notify.Send(cfg, "x").Contains("not a WeCom webhook"));
+
+            // Where notices go (11-04): the paired bot first, the group's webhook otherwise.
+            T.Check("paired with the bot: through the bot, webhook or not", () => Notify.Route(true, false, true) == "bot" && Notify.Route(true, false, false) == "bot");
+            T.Check("the bot refused its id and secret: the group, if there is a webhook", () => Notify.Route(true, true, true) == "group");
+            T.Check("the bot refused and no webhook: nowhere", () => Notify.Route(true, true, false) == "");
+            T.Check("nobody paired: the group", () => Notify.Route(false, false, true) == "group");
+            T.Check("nobody paired and no webhook: nowhere", () => Notify.Route(false, false, false) == "");
         }
     }
 }

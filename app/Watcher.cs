@@ -138,8 +138,9 @@ namespace KiroAutoContinue
             return st;
         }
 
-        // A notice: logged, and (when notify is set and the kind is listed) sent to your phone. code says what
-        // happened; "done" is an until-done finish, everything else needs you.
+        // A notice: logged, and (when its kind is listed in notify.events) sent to your phone: through the bot once
+        // an account has paired with it, else the group's webhook. code says what happened; "done" is an
+        // until-done finish, everything else needs you.
         void WriteNotice(string code, string name, string tag, string detail, string id = "")
         {
             Log(name + " : " + tag + " - " + detail);
@@ -147,12 +148,12 @@ namespace KiroAutoContinue
             Act(code == "done" ? "done" : "need." + code, id);
             if (!string.IsNullOrEmpty(id) && code == "outOfCredits") creditWait[id] = DateTime.Now;
             string kind = code == "done" ? "done" : "needsYou";
-            if (Json.Str(cfg.At("notify", "webhook")).Length == 0) return;
             if (!Json.StrArr(cfg.At("notify", "events")).Contains(kind)) return;
             string shown = name;
             if (!string.IsNullOrEmpty(id) && remote != null)
                 shown = Policy.FormatText(Json.At(Rw(), "numbered"), new Dictionary<string, string> { { "n", GetNumber(id).ToString() } }) + name;
-            string err = Notify.Send(cfg, Notify.Format(cfg, code, shown, detail));
+            // through the bot once an account has paired with it, else the group's webhook (SendNotice)
+            string err = SendNotice(Notify.Format(cfg, code, shown, detail));
             if (err.Length > 0) Log("notice not sent: " + err);
         }
 

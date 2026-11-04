@@ -11,6 +11,17 @@ namespace KiroAutoContinue
     // user's config, out of git and out of the log. Port of src/Notify.ps1, WeCom only. Needs Config.
     internal static class Notify
     {
+        // Where notices and the morning status go (11-04, the user: no group push needed once the bot is set up).
+        // "bot": to the accounts paired with the bot, in their own chat with it, so notices and commands share one
+        // chat (a notice made while the bot reconnects waits in its queue). "group": the webhook, when nobody has
+        // paired with a bot, or the bot is refused its id and secret. "": nowhere to send.
+        public static string Route(bool botPaired, bool botRefused, bool hasWebhook)
+        {
+            if (botPaired && !botRefused) return "bot";
+            if (hasWebhook) return "group";
+            return "";
+        }
+
         public static bool IsWeCom(string url)
         {
             return url.StartsWith("https://qyapi.weixin.qq.com/", StringComparison.OrdinalIgnoreCase);

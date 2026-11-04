@@ -34,7 +34,7 @@ namespace KiroAutoContinue
         public int QueuedCount;
     }
 
-    // The engine: watches Kiro's records and acts, the same way as kiro-auto-continue.ps1. Runs on its own STA
+    // The engine: watches Kiro's records and acts, the same way as kiro-auto-continue.ps1 did (in v0.2). Runs on its own STA
     // thread (UI Automation and MSAA are COM). The GUI reads Snapshot()/Recent and posts actions through Request*.
     internal sealed partial class Watcher
     {

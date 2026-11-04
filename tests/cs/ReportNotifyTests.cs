@@ -6,7 +6,7 @@ using System.Text;
 namespace KiroAutoContinue
 {
     // Report.cs: counting what the watcher did from its log, and when the morning status is due. The cases of
-    // tests\Report.Tests.ps1, one for one.
+    // tests\Report.Tests.ps1 (in v0.2), one for one.
     internal static class ReportTests
     {
         static int Get(Dictionary<string, int> t, string k) { int v; return t.TryGetValue(k, out v) ? v : 0; }
@@ -45,7 +45,7 @@ namespace KiroAutoContinue
         }
     }
 
-    // Notify.cs: the webhook, the JSON body, the notice text. Sends nothing. The cases of tests\Notify.Tests.ps1
+    // Notify.cs: the webhook, the JSON body, the notice text. Sends nothing. The cases of tests\Notify.Tests.ps1 (in v0.2)
     // that apply: the exe sends to WeCom only, so the two about Feishu's body and signature are not here, and a
     // Feishu or Lark webhook must be refused instead.
     internal static class NotifyTests

@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace KiroAutoContinue
 {
-    // The morning status, counted from the watcher's own log. Port of src/Report.ps1.
+    // The morning status, counted from the watcher's own log. Port of src/Report.ps1 (in v0.2).
     internal static class Report
     {
         public sealed class Counts

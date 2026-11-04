@@ -12,7 +12,7 @@ using System.Threading;
 
 namespace KiroAutoContinue
 {
-    // Commands from your phone through a WeCom smart bot (API mode, long connection). Port of src/Remote.ps1.
+    // Commands from your phone through a WeCom smart bot (API mode, long connection). Port of src/Remote.ps1 (in v0.2).
     // Every word you type or read is in config.default.json (words.<lang>.remote).
     internal static class Remote
     {

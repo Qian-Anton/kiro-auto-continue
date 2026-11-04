@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 namespace KiroAutoContinue
 {
     // Remote.cs and the phone's "continue" in Policy.cs: commands, frames, the status words. Connects to nothing.
-    // The cases of tests\Remote.Tests.ps1, one for one.
+    // The cases of tests\Remote.Tests.ps1 (in v0.2), one for one.
     internal static class RemoteTests
     {
         static Config cfg;

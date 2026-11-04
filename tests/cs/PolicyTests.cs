@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace KiroAutoContinue
 {
-    // Policy.cs: made-up turns in, decisions out. The cases of tests\Policy.Tests.ps1, one for one.
+    // Policy.cs: made-up turns in, decisions out. The cases of tests\Policy.Tests.ps1 (in v0.2), one for one.
     internal static class PolicyTests
     {
         static Config cfg;

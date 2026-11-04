@@ -8,7 +8,7 @@ namespace KiroAutoContinue
 {
     // Short notices to your phone through a WeCom group bot's webhook (qyapi.weixin.qq.com: in a group, the
     // "..." menu > Message push > Add). Anyone holding the webhook can post to that group, so it lives in the
-    // user's config, out of git and out of the log. Port of src/Notify.ps1, WeCom only. Needs Config.
+    // user's config, out of git and out of the log. Port of src/Notify.ps1 (in v0.2), WeCom only. Needs Config.
     internal static class Notify
     {
         // Where notices and the morning status go (11-04, the user: no group push needed once the bot is set up).

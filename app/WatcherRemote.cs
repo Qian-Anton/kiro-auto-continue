@@ -12,7 +12,7 @@ namespace KiroAutoContinue
 {
     // The rest of the watcher: the small state files (numbers, queue, paired accounts, report state), the WeCom
     // command handlers, the morning status, and the hooks the GUI calls. Port of the phone/report parts of
-    // kiro-auto-continue.ps1.
+    // kiro-auto-continue.ps1 (in v0.2).
     internal sealed partial class Watcher
     {
         sealed class NewResult { public string Why = ""; public string Id = ""; }

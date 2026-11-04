@@ -14,7 +14,7 @@ namespace KiroAutoContinue
     internal sealed class TabHit { public KiroWindow Win; public AutomationElement Root; public KiroTab Tab; }
     internal sealed class TabFind { public int Count; public TabHit Hit; }
 
-    // Reading and driving the Kiro chat panel through UI Automation. Port of src/KiroUi.ps1. All calls run on the
+    // Reading and driving the Kiro chat panel through UI Automation. Port of src/KiroUi.ps1 (in v0.2). All calls run on the
     // watcher's STA thread, which first calls Init() to search the raw view (Chromium's plain divs are not in the
     // control view).
     internal static class KiroUi

@@ -1,4 +1,5 @@
-# your own settings, the accounts paired with your bot, and the run logs stay on your machine
+# the script version's (v0.2) own settings, paired accounts and run logs, if it was used from this folder
+# (the exe keeps all of these in %APPDATA%\KiroAutoContinue)
 config.json
 remote-allow.json
 logs/

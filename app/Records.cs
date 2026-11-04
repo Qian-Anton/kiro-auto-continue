@@ -34,7 +34,7 @@ namespace KiroAutoContinue
     }
 
     // Kiro's own session records: %USERPROFILE%\.kiro\sessions\<workspace>\sess_<id>\. Reading them needs no tab
-    // switching and does not lag when Kiro is minimized. Port of src/Records.ps1.
+    // switching and does not lag when Kiro is minimized. Port of src/Records.ps1 (in v0.2).
     internal static class Records
     {
         public static readonly string SessionsRoot =
@@ -308,7 +308,7 @@ namespace KiroAutoContinue
         }
 
         // Should this turn be continued now that Kiro has restarted? Marks it (Restart; an open one also Ended,
-        // without credits) and returns true. See the notes in src/Records.ps1.
+        // without credits) and returns true. See docs/how-it-works.md.
         public static bool SetRestartCut(Turn turn, double windowMinutes, DateTime? kiroStart, IList<string> limitErrors)
         {
             if (turn.Restart) return true;

@@ -39,7 +39,7 @@ namespace KiroAutoContinue
         }
     }
 
-    // What to do when a session stops. No UI here. Port of src/Policy.ps1; every word the agent sees lives in
+    // What to do when a session stops. No UI here. Port of src/Policy.ps1 (in v0.2); every word the agent sees lives in
     // config.default.json.
     internal static class Policy
     {

@@ -7,7 +7,7 @@ using System.Text;
 
 namespace KiroAutoContinue
 {
-    // Records.cs: made-up messages.jsonl lines in, turns out. The cases of tests\Records.Tests.ps1, one for one.
+    // Records.cs: made-up messages.jsonl lines in, turns out. The cases of tests\Records.Tests.ps1 (in v0.2), one for one.
     internal static class RecordsTests
     {
         static string L(string type, string rest) { return "{\"id\":\"x\",\"timestamp\":\"t\",\"payload\":{\"type\":\"" + type + "\"" + rest + "}}"; }

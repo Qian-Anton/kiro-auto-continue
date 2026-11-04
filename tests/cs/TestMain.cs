@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 
 namespace KiroAutoContinue
 {
-    // Unit tests for the exe's logic: the same cases as tests\*.Tests.ps1 for the script version, plus a few for
+    // Unit tests for the exe's logic: the same cases as tests\*.Tests.ps1 for the script version (in v0.2), plus a few for
     // what only the exe has. Kiro is not needed and nothing is sent. Settings are the defaults built into the
     // exe, read through a scratch data folder (KAC_DATA_DIR), never yours.
     //   KiroAutoContinue.Tests.exe              all tests; exit code = failures

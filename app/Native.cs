@@ -5,7 +5,7 @@ using Accessibility;
 namespace KiroAutoContinue
 {
     // Win32 helpers: user idle time, keeping Windows awake, and typing into Chromium's chat box through MSAA.
-    // Port of the C# embedded in src/Native.ps1.
+    // Port of the C# embedded in src/Native.ps1 (in v0.2).
     internal static class Native
     {
         [StructLayout(LayoutKind.Sequential)]

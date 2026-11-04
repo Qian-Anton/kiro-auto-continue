@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Unit tests for the exe's logic: the cases of tests\*.Tests.ps1, run against the C# code. A console exe with
+  <!-- Unit tests for the exe's logic: the cases of tests\*.Tests.ps1 (in v0.2), run against the C# code. A console exe with
        no test framework (nothing more to download); it compiles the app's own logic files, so what is tested is
        the very code that ships. Run tests\cs\run.ps1. ASCII only. -->
   <PropertyGroup>

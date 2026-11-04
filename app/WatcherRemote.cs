@@ -187,13 +187,18 @@ namespace KiroAutoContinue
             return lines;
         }
 
+        // The credits as Kiro last saw them, in one line ("" before Kiro asked).
+        string CreditsLine() { return Credits.Text(Credits.Latest(), Json.At(W(), "credits"), DateTime.Now); }
+
         string RemoteStatus(object rw)
         {
             double hours = cfg.Dbl("remote.listHours", 24);
             var lines = StatusLines(rw, hours, null);
-            if (lines.Count == 0) return Fmt(rw, "none", V("hours", hours.ToString("0.##", CultureInfo.InvariantCulture)));
-            lines.Add(""); lines.Add(Fmt(rw, "hint", new Dictionary<string, string>()));
-            return string.Join("\n", lines);
+            string text;
+            if (lines.Count == 0) text = Fmt(rw, "none", V("hours", hours.ToString("0.##", CultureInfo.InvariantCulture)));
+            else { lines.Add(""); lines.Add(Fmt(rw, "hint", new Dictionary<string, string>())); text = string.Join("\n", lines); }
+            string credits = CreditsLine();
+            return credits.Length > 0 ? credits + "\n\n" + text : text;
         }
 
         // waitIdle: false for a click in the window (you are in this window, not typing into Kiro).
@@ -473,7 +478,10 @@ namespace KiroAutoContinue
                 { "pushes", Report.Total(counts.Pushes).ToString() },
                 { "needs", counts.Needs.Count.ToString() }
             });
-            var outp = new List<string> { head, sum, "" };
+            var outp = new List<string> { head, sum };
+            string credits = CreditsLine();
+            if (credits.Length > 0) outp.Add(credits);
+            outp.Add("");
             outp.AddRange(rows);
             return string.Join("\n", outp);
         }
@@ -549,6 +557,7 @@ namespace KiroAutoContinue
                 rows.Add(row);
             }
             LastSnapshot = rows;
+            LastCredits = Credits.Latest();
         }
 
         public void RequestContinue(string id) { Post(() => ManualContinue(id)); }
@@ -585,12 +594,26 @@ namespace KiroAutoContinue
             else { Log(name + " : not stopped: " + why); Act("window.notStopped", id, Why(Rw(), why)); }
         }
 
+        // --preview --texts: what "status" would answer on the phone and what the morning summary would say now,
+        // from the real records and logs. Read only; nothing is sent.
+        public string PreviewTexts()
+        {
+            string report = ReportText();
+            return "== status ==\n" + RemoteStatus(Rw()) + "\n\n== morning summary ==\n" + (report ??
+                "(none: no session wrote its record in the last " + cfg.Dbl("report.hours", 12).ToString("0.##", CultureInfo.InvariantCulture) + " hours)") + "\n";
+        }
+
         // --preview only: one read-only look at the records for the window. With sample, made-up states on the
         // listed sessions and a few made-up recent lines, so every style shows. Nothing is sent or written.
         public void PreviewSeed(bool sample)
         {
             BuildSnapshot();
             if (!sample) return;
+            LastCredits = new CreditInfo
+            {
+                At = DateTime.Now.AddMinutes(-28), Plan = "KIRO PRO", Used = 306.07, Limit = 1000,
+                Bonuses = { new CreditBonus { Name = "Trial credits", Status = "ACTIVE", Used = 0, Limit = 500, Trial = true } }
+            };
             object rw = Rw();
             var rows = LastSnapshot.ToList();
             for (int i = rows.Count; i < 7; i++)

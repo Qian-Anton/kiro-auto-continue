@@ -64,6 +64,7 @@ namespace KiroAutoContinue
         public readonly List<string> Recent = new List<string>();
         public event Action<string> OnLog;
         public volatile List<SessionRow> LastSnapshot = new List<SessionRow>();
+        public volatile CreditInfo LastCredits;   // the credits as Kiro last saw them; null before Kiro asked
         readonly bool readOnly;   // --preview: never writes the log, numbers or activity files
 
         static readonly Regex RxStop = new Regex("\"stopReason\":\"(\\w+)\"", RegexOptions.Compiled);

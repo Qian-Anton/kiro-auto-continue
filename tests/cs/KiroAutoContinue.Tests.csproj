@@ -27,7 +27,7 @@
   <ItemGroup>
     <!-- the logic under test, straight from app\ (the window, the watcher loop and the UI Automation code are not
          in here: they need Kiro on screen, and are tried on the real thing) -->
-    <Compile Include="..\..\app\Json.cs;..\..\app\Config.cs;..\..\app\Records.cs;..\..\app\Policy.cs;..\..\app\Notify.cs;..\..\app\Report.cs;..\..\app\Remote.cs;..\..\app\Panel.cs"
+    <Compile Include="..\..\app\Json.cs;..\..\app\Config.cs;..\..\app\Records.cs;..\..\app\Policy.cs;..\..\app\Notify.cs;..\..\app\Report.cs;..\..\app\Remote.cs;..\..\app\Panel.cs;..\..\app\Credits.cs"
              Link="app\%(Filename)%(Extension)" />
     <!-- the defaults, embedded under the name Config.Load looks for in this assembly -->
     <EmbeddedResource Include="..\..\app\config.default.json" LogicalName="$(AssemblyName).config.default.json" />

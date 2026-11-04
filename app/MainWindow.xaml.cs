@@ -68,7 +68,7 @@ namespace KiroAutoContinue
         readonly ObservableCollection<RowVM> rows = new ObservableCollection<RowVM>();
         readonly ObservableCollection<ActVM> recent = new ObservableCollection<ActVM>();
         readonly DispatcherTimer timer;
-        object ui, rw;
+        object ui, rw, cw;
         bool loading, botEdited, wasPaused;
         Storyboard pulse;
         int phoneTick;
@@ -120,7 +120,7 @@ namespace KiroAutoContinue
         void Localize()
         {
             object w = cfg.Words(cfg.UiLang());
-            ui = Json.At(w, "ui"); rw = Json.At(w, "remote");
+            ui = Json.At(w, "ui"); rw = Json.At(w, "remote"); cw = Json.At(w, "credits");
             Title = U("appTitle");
             tabSessions.Header = U("tabSessions"); tabPhone.Header = U("tabPhone"); tabSettings.Header = U("tabSettings");
             colNum.Text = U("colNum"); colSession.Text = U("colSession"); colState.Text = U("colState");
@@ -214,6 +214,9 @@ namespace KiroAutoContinue
 
             statusTitle.Text = paused ? U("paused") : U("running");
             statusSummary.Text = summary;
+            string credits = Credits.Text(watcher.LastCredits, cw, DateTime.Now);
+            statusCredits.Text = credits;
+            statusCredits.Visibility = credits.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             pauseBtn.Content = paused ? U("resume") : U("pause");
             if (paused != wasPaused || statusCard.Tag == null) { wasPaused = paused; statusCard.Tag = "set"; CardColors(paused); UpdatePulse(); }
 
@@ -242,6 +245,7 @@ namespace KiroAutoContinue
             statusCard.BorderBrush = B(paused ? "#FDE68A" : "#A7F3D0");
             statusTitle.Foreground = B(paused ? "#92400E" : "#065F46");
             statusSummary.Foreground = B(paused ? "#B45309" : "#047857");
+            statusCredits.Foreground = statusSummary.Foreground;
             statusDot.Fill = B(paused ? "#F59E0B" : "#10B981");
             statusHalo.Fill = statusDot.Fill;
             pauseBtn.BorderBrush = B(paused ? "#FCD34D" : "#6EE7B7");

@@ -16,7 +16,8 @@ namespace KiroAutoContinue
     // --preview: the window with no watcher running (nothing is sent, typed or saved; the single-instance lock is
     // not taken, so it runs next to a real one). --shot=<png> draws it off screen at the screen's DPI, writes the
     // picture and <png>.txt (every text that is cut off, overlaps another, or sticks out of the window) and exits
-    // with 1 if there was any.
+    // with 1 if there was any. --texts=<file> shows no window: it writes what the phone's "status" and the
+    // morning summary would say now.
     internal static class Preview
     {
         public static int Run(Options o)
@@ -24,6 +25,11 @@ namespace KiroAutoContinue
             Config cfg = Config.Load();
             if (o.Lang.Length > 0) cfg.Root["language"] = o.Lang;   // this run only
             var watcher = new Watcher(cfg, true);
+            if (o.Texts.Length > 0)
+            {
+                File.WriteAllText(o.Texts, watcher.PreviewTexts(), new UTF8Encoding(false));
+                return 0;
+            }
             watcher.PreviewSeed(o.Sample);
             var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
             var win = new MainWindow(cfg, watcher, true);

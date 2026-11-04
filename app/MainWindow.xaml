@@ -43,6 +43,8 @@
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
               <TextBlock x:Name="statusTitle" FontSize="16" FontWeight="Bold" Foreground="#065F46" TextWrapping="Wrap"/>
               <TextBlock x:Name="statusSummary" FontSize="12.5" Foreground="#047857" Margin="0,3,0,0" TextWrapping="Wrap"/>
+              <!-- the credits as Kiro last saw them (Credits.cs); hidden until Kiro has asked -->
+              <TextBlock x:Name="statusCredits" FontSize="12.5" Foreground="#047857" Margin="0,3,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
             </StackPanel>
             <Button x:Name="pauseBtn" Grid.Column="2" Style="{StaticResource Btn}" BorderBrush="#6EE7B7" Foreground="#065F46"
                     Margin="14,0,0,0" VerticalAlignment="Center" Click="OnPause"/>

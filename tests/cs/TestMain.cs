@@ -33,6 +33,7 @@ namespace KiroAutoContinue
                 T.Run("Report", ReportTests.Run);
                 T.Run("Notify", NotifyTests.Run);
                 T.Run("Panel", PanelTests.Run);
+                T.Run("Credits", CreditsTests.Run);
                 T.Run("Exe only", ExeTests.Run);
                 Console.WriteLine();
                 Console.WriteLine("{0} passed, {1} failed{2}", T.Pass, T.Fail, T.Skip > 0 ? ", " + T.Skip + " skipped" : "");

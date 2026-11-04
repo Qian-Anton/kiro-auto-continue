@@ -51,11 +51,12 @@ namespace KiroAutoContinue
     // Command line. --tray: start hidden in the tray (what "start with Windows" uses). --exit: tell the running
     // copy to quit. For looking at the window without touching anything:
     // --preview [--sample] [--page=0|1|2] [--lang=zh|en] [--size=WxH] [--shot=out.png].
+    // --texts=out.txt: no window; writes what the phone's "status" and the morning summary would say now.
     internal sealed class Options
     {
         public bool Tray, Exit, Preview, Sample;
         public int Page, Width, Height;
-        public string Lang = "", Shot = "";
+        public string Lang = "", Shot = "", Texts = "";
 
         public static Options Parse(string[] args)
         {
@@ -74,6 +75,7 @@ namespace KiroAutoContinue
                     case "--page": int.TryParse(v, out o.Page); break;
                     case "--lang": o.Lang = v; break;
                     case "--shot": o.Shot = v; o.Preview = true; break;
+                    case "--texts": o.Texts = v; o.Preview = true; break;
                     case "--size":
                         var p = v.ToLowerInvariant().Split('x');
                         if (p.Length == 2) { int.TryParse(p[0], out o.Width); int.TryParse(p[1], out o.Height); }

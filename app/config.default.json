@@ -72,6 +72,13 @@
         "maxPushes": "做到完推满了次数，停了。",
         "done": "「做到完」的任务完成了。"
       },
+      "credits": {
+        "line": "额度（Kiro {at} 查的）：{plan}本月 {used}/{limit}{bonuses}{over}",
+        "plan": "{plan}，",
+        "trial": "，试用 {used}/{limit}",
+        "bonus": "，赠送 {used}/{limit}",
+        "over": "，超出 {n}"
+      },
       "remote": {
         "cmd": {
           "status": ["状态", "进度"],
@@ -319,6 +326,13 @@
         "idle": "Until-done: several pushes in a row did no work; stopped.",
         "maxPushes": "Until-done: reached the push limit; stopped.",
         "done": "Until-done: the task is finished."
+      },
+      "credits": {
+        "line": "Credits (Kiro checked at {at}): {plan}{used}/{limit} this month{bonuses}{over}",
+        "plan": "{plan}, ",
+        "trial": ", trial {used}/{limit}",
+        "bonus": ", bonus {used}/{limit}",
+        "over": ", {n} over the limit"
       },
       "remote": {
         "cmd": {

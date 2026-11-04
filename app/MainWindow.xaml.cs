@@ -60,6 +60,19 @@ namespace KiroAutoContinue
         public event PropertyChangedEventHandler PropertyChanged { add { } remove { } }
     }
 
+    // One bar of the credits card. Never changes after it is made (the bars are made again when Kiro's answer or
+    // the language changes).
+    internal sealed class CreditRowVM : INotifyPropertyChanged
+    {
+        public string Label { get; set; }
+        public string Value { get; set; }
+        public string Tone { get; set; }
+        public GridLength UsedWidth { get; set; }
+        public GridLength RestWidth { get; set; }
+        public Visibility BarVisibility { get; set; }
+        public event PropertyChangedEventHandler PropertyChanged { add { } remove { } }
+    }
+
     internal partial class MainWindow : Window
     {
         readonly Config cfg;
@@ -67,6 +80,8 @@ namespace KiroAutoContinue
         readonly bool preview;   // --preview: nothing is saved, sent or typed
         readonly ObservableCollection<RowVM> rows = new ObservableCollection<RowVM>();
         readonly ObservableCollection<ActVM> recent = new ObservableCollection<ActVM>();
+        readonly ObservableCollection<CreditRowVM> creditRows = new ObservableCollection<CreditRowVM>();
+        string creditsKey = "";
         readonly DispatcherTimer timer;
         object ui, rw, cw;
         bool loading, botEdited, wasPaused;
@@ -83,6 +98,7 @@ namespace KiroAutoContinue
             try { Icon = BitmapFrame.Create(new Uri("pack://application:,,,/app.ico", UriKind.Absolute)); } catch { }
             list.ItemsSource = rows;
             recentList.ItemsSource = recent;
+            creditsList.ItemsSource = creditRows;
             Localize();
             LoadSettings();
             watcher.OnActivity += OnActivity;
@@ -96,6 +112,7 @@ namespace KiroAutoContinue
             // in a short window "recent" gives up height first, so the session list keeps room for a few rows
             sessPage.SizeChanged += (s, e) => FitRecent();
             recentList.SizeChanged += (s, e) => FitRecent();
+            creditsCard.SizeChanged += (s, e) => FitRecent();
             pages.SelectionChanged += (s, e) => { if (e.Source == pages) { phoneTick = 0; Refresh(); } };
             Closed += (s, e) => { watcher.OnActivity -= OnActivity; timer.Stop(); };
             Refresh();
@@ -126,6 +143,7 @@ namespace KiroAutoContinue
             colNum.Text = U("colNum"); colSession.Text = U("colSession"); colState.Text = U("colState");
             emptyText.Text = U("empty");
             recentTitle.Text = U("recent"); openLogBtn.Content = U("openLog"); recentEmpty.Text = U("recentEmpty");
+            creditsTitle.Text = Json.Str(Json.At(cw, "title")); creditsKey = "";   // the bars are made again in the new language
 
             notifyTitle.Text = U("notifyTitle"); notifyHelp.Text = U("notifyHelp"); webhookHint.Text = U("webhookHint");
             testBtn.Content = U("testNotify");
@@ -214,9 +232,7 @@ namespace KiroAutoContinue
 
             statusTitle.Text = paused ? U("paused") : U("running");
             statusSummary.Text = summary;
-            string credits = Credits.Text(watcher.LastCredits, cw, DateTime.Now);
-            statusCredits.Text = credits;
-            statusCredits.Visibility = credits.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            RefreshCredits();
             pauseBtn.Content = paused ? U("resume") : U("pause");
             if (paused != wasPaused || statusCard.Tag == null) { wasPaused = paused; statusCard.Tag = "set"; CardColors(paused); UpdatePulse(); }
 
@@ -224,6 +240,40 @@ namespace KiroAutoContinue
             emptyText.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
             if (pages.SelectedItem == tabPhone && phoneTick-- <= 0) { phoneTick = 2; RefreshPhone(); }
+        }
+
+        // The credits card: Kiro's last answer (the watcher reads Kiro's log every few seconds). The bars are made
+        // again only when the answer or the language changed; "how long ago" moves on with every refresh.
+        void RefreshCredits()
+        {
+            var c = watcher.LastCredits;
+            if (c == null || Json.Obj(cw) == null)
+            {
+                creditsCard.Visibility = Visibility.Collapsed; creditRows.Clear(); creditsKey = "";
+                return;
+            }
+            DateTime now = DateTime.Now;
+            creditsCard.Visibility = Visibility.Visible;
+            creditsPlan.Text = Credits.PlanName(c.Plan);
+            creditsWhen.Text = Credits.Checked(c, cw, now);
+            var bars = Credits.Rows(c);
+            string key = string.Join("|", bars.Select(r => r.Kind + ":" + Credits.N(r.Used) + "/" + Credits.N(r.Limit)));
+            if (key == creditsKey) return;
+            creditsKey = key;
+            creditRows.Clear();
+            foreach (var r in bars)
+            {
+                double f = r.Fraction;
+                creditRows.Add(new CreditRowVM
+                {
+                    Label = Json.Str(Json.At(cw, r.Kind + "Row")),
+                    Value = Credits.Value(r, cw),
+                    Tone = r.Tone,
+                    UsedWidth = new GridLength(f, GridUnitType.Star),
+                    RestWidth = new GridLength(1 - f, GridUnitType.Star),
+                    BarVisibility = r.Kind == "over" ? Visibility.Collapsed : Visibility.Visible
+                });
+            }
         }
 
         static readonly Dictionary<string, SolidColorBrush> brushes = new Dictionary<string, SolidColorBrush>();
@@ -245,7 +295,6 @@ namespace KiroAutoContinue
             statusCard.BorderBrush = B(paused ? "#FDE68A" : "#A7F3D0");
             statusTitle.Foreground = B(paused ? "#92400E" : "#065F46");
             statusSummary.Foreground = B(paused ? "#B45309" : "#047857");
-            statusCredits.Foreground = statusSummary.Foreground;
             statusDot.Fill = B(paused ? "#F59E0B" : "#10B981");
             statusHalo.Fill = statusDot.Fill;
             pauseBtn.BorderBrush = B(paused ? "#FCD34D" : "#6EE7B7");
@@ -286,7 +335,8 @@ namespace KiroAutoContinue
             double line = 23;
             var first = recent.Count > 0 ? recentList.ItemContainerGenerator.ContainerFromIndex(0) as FrameworkElement : null;
             if (first != null && first.ActualHeight > 8) line = first.ActualHeight;
-            double room = Math.Max(line * 2, Math.Min(150.0, sessPage.ActualHeight - 330));
+            double card = creditsCard.Visibility == Visibility.Visible ? creditsCard.ActualHeight + creditsCard.Margin.Top : 0;
+            double room = Math.Max(line * 2, Math.Min(150.0, sessPage.ActualHeight - 330 - card));
             double fit = Math.Floor(room / line) * line;
             if (Math.Abs(recentScroll.MaxHeight - fit) > 0.5) recentScroll.MaxHeight = fit;
         }

@@ -92,10 +92,29 @@ namespace KiroAutoContinue
                 () => Credits.PlanName("KIRO FREE") == "Kiro Free" && Credits.PlanName("KIRO PRO+") == "Kiro Pro+" && Credits.PlanName("Kiro Power") == "Kiro Power" && Credits.PlanName(null) == "");
             T.Check("nothing to show: no line", () => Credits.Text(null, en, day) == "" && Credits.Text(f, null, day) == "");
 
+            // the window's card: one bar per pool, its figures, its colour, and how long ago Kiro asked
+            var fr = Credits.Rows(f);
+            T.Check("card: this month, then the trial", () => fr.Count == 2 && fr[0].Kind == "month" && fr[1].Kind == "trial"
+                && Credits.Value(fr[0], en) == "50 / 50" && Credits.Value(fr[1], en) == "0 / 500");
+            T.Check("card: used up is full, untouched is ok", () => fr[0].Fraction == 1 && fr[0].Tone == "full" && fr[1].Fraction == 0 && fr[1].Tone == "ok");
+            var mr = Credits.Rows(mix);
+            T.Check("card: used-up bonus, other bonus, no expired one, the overage last and barless: " + string.Join(",", mr.Select(r => r.Kind + "=" + Credits.Value(r, en))),
+                () => string.Join(",", mr.Select(r => r.Kind + "=" + Credits.Value(r, en) + ":" + r.Tone)) == "month=2,000 / 2,000:full,trial=500 / 500:full,bonus=20 / 250:ok,over=37.5:full");
+            T.Check("card: amber from 80 % on", () => new CreditRow { Kind = "month", Used = 40, Limit = 50 }.Tone == "warn"
+                && new CreditRow { Kind = "month", Used = 39.9, Limit = 50 }.Tone == "ok" && new CreditRow { Kind = "month", Used = 60, Limit = 50 }.Fraction == 1);
+            T.Check("card: nothing from Kiro, no bars", () => Credits.Rows(null).Count == 0 && Credits.Checked(null, en, day) == "");
+            T.Check("how long ago: just now, minutes, hours, days", () => Credits.Ago(day.AddSeconds(-30), day, en) == "just now"
+                && Credits.Ago(day.AddMinutes(-12.7), day, en) == "12 min ago" && Credits.Ago(day.AddMinutes(-154), day, en) == "2 h ago"
+                && Credits.Ago(day.AddDays(-3), day, en) == "3 days ago" && Credits.Ago(day.AddMinutes(5), day, en) == "just now");
+            T.Check("how long ago, in Chinese", () => Credits.Ago(day.AddMinutes(-12), day, zh) == "12 " + T.U(0x5206, 0x949F, 0x524D));
+            T.Check("card corner: " + Credits.Checked(f, en, day), () => Credits.Checked(f, en, day) == "Kiro checked at 21:45 \u00B7 1 h ago"
+                && Credits.Checked(f, en, day.AddDays(1)) == "Kiro checked at 11-04 21:45 \u00B7 25 h ago");
+
             // the words: the same keys and {placeholders} in both languages
             var zk = Json.Obj(zh) ?? new Dictionary<string, object>(); var ek = Json.Obj(en) ?? new Dictionary<string, object>();
-            T.Check("words: line, plan, trial, bonus and over in both languages",
-                () => new[] { "line", "plan", "trial", "bonus", "over" }.All(k => Json.Str(Json.At(zh, k)).Length > 0 && Json.Str(Json.At(en, k)).Length > 0) && zk.Count == ek.Count);
+            var wanted = new[] { "line", "plan", "trial", "bonus", "over", "title", "monthRow", "trialRow", "bonusRow", "overRow", "value", "checked", "agoNow", "agoMin", "agoHour", "agoDay" };
+            var missing = wanted.Where(k => Json.Str(Json.At(zh, k)).Length == 0 || Json.Str(Json.At(en, k)).Length == 0).ToList();
+            T.Check("words: every one the line and the card use, in both languages: " + string.Join(", ", missing), () => missing.Count == 0 && zk.Count == ek.Count);
             Func<string, string> holes = s => string.Join(",", Regex.Matches(s ?? "", @"\{(\w+)\}").Cast<Match>().Select(m => m.Groups[1].Value).OrderBy(x => x, StringComparer.Ordinal));
             var bad = zk.Keys.Where(k => holes(Json.Str(zk[k])) != holes(Json.Str(Json.At(en, k)))).ToList();
             T.Check("words: the same {placeholders} in both languages: " + string.Join(", ", bad), () => bad.Count == 0);

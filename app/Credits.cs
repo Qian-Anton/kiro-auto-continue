@@ -14,6 +14,16 @@ namespace KiroAutoContinue
         public bool Trial;
     }
 
+    // One bar of the window's credits card: this month's plan credits, a bonus pool, or the overage.
+    internal sealed class CreditRow
+    {
+        public string Kind = "";            // "month", "trial", "bonus" or "over"
+        public double Used, Limit;          // the overage has no limit, so no bar
+        public double Fraction { get { return Limit > 0 ? Math.Min(1, Math.Max(0, Used / Limit)) : (Used > 0 ? 1 : 0); } }
+        // "ok"; "warn" from 80 % on; "full" once used up (and the overage)
+        public string Tone { get { double f = Fraction; return Kind == "over" || f >= 1 ? "full" : f >= 0.8 ? "warn" : "ok"; } }
+    }
+
     // The credits as Kiro last saw them: one answer to its GetUsageLimits request.
     internal sealed class CreditInfo
     {
@@ -161,17 +171,64 @@ namespace KiroAutoContinue
             }
         }
 
-        // The line for the window, the phone's status and the morning summary, from words.<lang>.credits; "" when
-        // there is nothing to show. Today's time as HH:mm, an older one with its date.
+        static bool Expired(CreditBonus bn) { return bn.Status.IndexOf("EXPIRED", StringComparison.OrdinalIgnoreCase) >= 0; }
+
+        // When Kiro asked: today's time as HH:mm, an older one with its date.
+        public static string AtText(CreditInfo c, DateTime now)
+        {
+            return c.At.ToString(c.At.Date == now.Date ? "HH:mm" : "MM-dd HH:mm", CultureInfo.InvariantCulture);
+        }
+
+        // The window's credits card, top to bottom: this month, each bonus pool that has not expired, the overage.
+        public static List<CreditRow> Rows(CreditInfo c)
+        {
+            var rows = new List<CreditRow>();
+            if (c == null) return rows;
+            rows.Add(new CreditRow { Kind = "month", Used = c.Used, Limit = c.Limit });
+            foreach (var bn in c.Bonuses)
+                if (!Expired(bn)) rows.Add(new CreditRow { Kind = bn.Trial ? "trial" : "bonus", Used = bn.Used, Limit = bn.Limit });
+            if (c.Overage > 0) rows.Add(new CreditRow { Kind = "over", Used = c.Overage });
+            return rows;
+        }
+
+        // How long ago Kiro asked, in words.<lang>.credits: just now, 12 min ago, 2 h ago, 3 days ago.
+        public static string Ago(DateTime at, DateTime now, object words)
+        {
+            double min = (now - at).TotalMinutes;
+            if (min < 1) return Json.Str(Json.At(words, "agoNow"));
+            string key = min < 60 ? "agoMin" : min < 48 * 60 ? "agoHour" : "agoDay";
+            int n = (int)(min < 60 ? min : min < 48 * 60 ? min / 60 : min / 1440);
+            return Policy.FormatText(Json.At(words, key), new Dictionary<string, string> { { "n", n.ToString(CultureInfo.InvariantCulture) } });
+        }
+
+        // The card's corner: when Kiro asked and how long ago that is ("" with nothing to show).
+        public static string Checked(CreditInfo c, object words, DateTime now)
+        {
+            if (c == null || Json.Obj(words) == null) return "";
+            return Policy.FormatText(Json.At(words, "checked"), new Dictionary<string, string>
+            {
+                { "at", AtText(c, now) }, { "ago", Ago(c.At, now, words) }
+            });
+        }
+
+        // One bar's figures: "50 / 50", or the overage alone.
+        public static string Value(CreditRow r, object words)
+        {
+            if (r.Kind == "over") return N(r.Used);
+            return Policy.FormatText(Json.At(words, "value"), new Dictionary<string, string> { { "used", N(r.Used) }, { "limit", N(r.Limit) } });
+        }
+
+        // The line for the phone's status and the morning summary, from words.<lang>.credits; "" when there is
+        // nothing to show.
         public static string Text(CreditInfo c, object words, DateTime now)
         {
             if (c == null || Json.Obj(words) == null) return "";
-            string at = c.At.ToString(c.At.Date == now.Date ? "HH:mm" : "MM-dd HH:mm", CultureInfo.InvariantCulture);
+            string at = AtText(c, now);
             string plan = PlanName(c.Plan);
             var bonuses = new StringBuilder();
             foreach (var bn in c.Bonuses)
             {
-                if (bn.Status.IndexOf("EXPIRED", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                if (Expired(bn)) continue;
                 bonuses.Append(Policy.FormatText(Json.At(words, bn.Trial ? "trial" : "bonus"),
                     new Dictionary<string, string> { { "used", N(bn.Used) }, { "limit", N(bn.Limit) } }));
             }

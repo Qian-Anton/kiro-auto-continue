@@ -77,7 +77,18 @@
         "plan": "{plan}，",
         "trial": "，试用 {used}/{limit}",
         "bonus": "，赠送 {used}/{limit}",
-        "over": "，超出 {n}"
+        "over": "，超出 {n}",
+        "title": "额度",
+        "monthRow": "本月",
+        "trialRow": "试用",
+        "bonusRow": "赠送",
+        "overRow": "超出",
+        "value": "{used} / {limit}",
+        "checked": "Kiro {at} 查的 · {ago}",
+        "agoNow": "刚刚",
+        "agoMin": "{n} 分钟前",
+        "agoHour": "{n} 小时前",
+        "agoDay": "{n} 天前"
       },
       "remote": {
         "cmd": {
@@ -332,7 +343,18 @@
         "plan": "{plan}, ",
         "trial": ", trial {used}/{limit}",
         "bonus": ", bonus {used}/{limit}",
-        "over": ", {n} over the limit"
+        "over": ", {n} over the limit",
+        "title": "Credits",
+        "monthRow": "This month",
+        "trialRow": "Trial",
+        "bonusRow": "Bonus",
+        "overRow": "Over the limit",
+        "value": "{used} / {limit}",
+        "checked": "Kiro checked at {at} · {ago}",
+        "agoNow": "just now",
+        "agoMin": "{n} min ago",
+        "agoHour": "{n} h ago",
+        "agoDay": "{n} days ago"
       },
       "remote": {
         "cmd": {

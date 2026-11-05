@@ -94,7 +94,7 @@ namespace KiroAutoContinue
             };
         }
 
-        public sealed class LineRead { public List<string> Lines = new List<string>(); public long End; }
+        public sealed class LineRead { public List<string> Lines = new List<string>(); public long End, Bytes; }   // Bytes: read from the file
 
         // Complete lines of path from byte 'from' on, at most the last 'max' bytes. A line still being written is
         // left for next time; End is where the next read starts.
@@ -115,6 +115,7 @@ namespace KiroAutoContinue
                 fs.Seek(start, SeekOrigin.Begin);
                 int n = 0;
                 while (n < count) { int got = fs.Read(buf, n, count - n); if (got <= 0) break; n += got; }
+                res.Bytes = n;
                 int nl = n > 0 ? Array.LastIndexOf(buf, (byte)10, n - 1) : -1;
                 if (nl < 0) { res.End = start; return res; }
                 string text = Encoding.UTF8.GetString(buf, 0, nl);
@@ -252,11 +253,19 @@ namespace KiroAutoContinue
             return e;
         }
 
-        public static Turn GetRecordTurn(IEnumerable<string> lines)
+        public static Turn GetRecordTurn(IEnumerable<string> lines) { return BuildTurn(ToEntries(lines)); }
+
+        static List<Entry> ToEntries(IEnumerable<string> lines)
         {
             var entries = new List<Entry>();
             foreach (string l in lines) if (!string.IsNullOrEmpty(l)) { var e = ToEntry(l); if (e != null) entries.Add(e); }
+            return entries;
+        }
 
+        // The last turn, from a record's entries in order. It uses everything from the last turn_start on, and before
+        // that only the user messages (TurnCache keeps just those). Leaves the entries as they are.
+        static Turn BuildTurn(List<Entry> entries)
+        {
             var turn = new Turn();
             for (int i = entries.Count - 1; i >= 0 && turn.Users.Count < 30; i--)
                 if (entries[i].Type == "user") turn.Users.Add(entries[i].Text);
@@ -289,7 +298,7 @@ namespace KiroAutoContinue
             {
                 var a = open[open.Count - 1];
                 turn.Ask = IsRetry(a) ? "retry" : "question";
-                turn.AskId = a.Id; turn.AskText = a.Text; turn.AskAt = a.At; turn.AskOptions = a.Options;
+                turn.AskId = a.Id; turn.AskText = a.Text; turn.AskAt = a.At; turn.AskOptions = new List<string>(a.Options);
             }
             turn.Final = string.Join("\n", says).Trim();
             turn.Restart = turn.Recovered;
@@ -318,18 +327,152 @@ namespace KiroAutoContinue
             return turn;
         }
 
+        const long MaxTail = 67108864L;   // 64 MB
+
         // The last turn of a session, reading back from the end, four times further each round (up to 64 MB)
-        // until a user message turns up.
+        // until a user message turns up. It reads all of that again each time; the watcher reads through TurnCache.
         public static Turn ReadSessionTurn(string dir, long tail = 4194304)
         {
-            string path = Path.Combine(dir, "messages.jsonl");
+            long end, bytes;
+            return BuildTurn(ReadTail(Path.Combine(dir, "messages.jsonl"), tail, out end, out bytes));
+        }
+
+        // The entries of a record's tail, read the way ReadSessionTurn reads it. end: just after the last complete
+        // line read; bytes: how much was read, all rounds together.
+        static List<Entry> ReadTail(string path, long tail, out long end, out long bytes)
+        {
             long size = 0; try { size = new FileInfo(path).Length; } catch { }
             long n = Math.Max(65536L, tail);
+            bytes = 0;
             while (true)
             {
-                var turn = GetRecordTurn(ReadLines(path, 0, n).Lines);
-                if (turn.Users.Count > 0 || n >= size || n >= 67108864L) return turn;
+                var r = ReadLines(path, 0, n);
+                bytes += r.Bytes;
+                var entries = ToEntries(r.Lines);
+                if (entries.Exists(e => e.Type == "user") || n >= size || n >= MaxTail) { end = r.End; return entries; }
                 n *= 4;
+            }
+        }
+
+        // The last turn of each session, kept from one read to the next, so that a read takes only the lines written
+        // since the one before. The watcher reads the same sessions every few seconds (the window's list, and the
+        // check for a question Kiro holds a turn on). Reading each tail afresh every time (4 MB, and 84 MB when the
+        // last user message is more than 64 MB back) came to 234 MB read and about 1 GB of garbage a poll, and up
+        // to 8 GB of memory (11-05).
+        public sealed class TurnCache
+        {
+            sealed class Item
+            {
+                public long End;         // where the next read starts: just after the last complete line read
+                public byte[] Mark;      // the bytes just before End, to tell a record that grew from one written anew
+                public List<Entry> Entries;
+                public DateTime Used;
+            }
+
+            readonly Dictionary<string, Item> items = new Dictionary<string, Item>(StringComparer.OrdinalIgnoreCase);
+            readonly object gate = new object();
+            DateTime pruned = DateTime.Now;
+
+            public int Count { get { lock (gate) return items.Count; } }
+            public long BytesRead { get { lock (gate) return bytesRead; } }
+            long bytesRead;
+
+            // How many entries it keeps for a session (0 if none): for the tests.
+            public int Kept(string dir)
+            {
+                lock (gate) { Item it; return items.TryGetValue(Path.Combine(dir, "messages.jsonl"), out it) ? it.Entries.Count : 0; }
+            }
+
+            // What ReadSessionTurn(dir, tail) gives. The record is read from its tail again only when it is new here,
+            // got shorter, grew by more than 64 MB, or no longer has the same bytes before where the last read ended;
+            // otherwise only the lines added since. A new Turn each time: callers change the one they get.
+            public Turn Read(string dir, long tail = 4194304)
+            {
+                string path = Path.Combine(dir, "messages.jsonl");
+                long size = -1;
+                try { var fi = new FileInfo(path); if (fi.Exists) size = fi.Length; } catch { }
+                lock (gate)
+                {
+                    DateTime now = DateTime.Now;
+                    if (now < pruned || (now - pruned).TotalMinutes >= 10) { Prune(now); pruned = now; }
+                    if (size < 0) { items.Remove(path); return BuildTurn(new List<Entry>()); }
+                    Item it;
+                    bool fresh = !items.TryGetValue(path, out it) || size < it.End || size - it.End > MaxTail;
+                    if (!fresh && size > it.End && !Same(BytesBefore(path, it.End), it.Mark)) fresh = true;
+                    bool read = false;
+                    if (fresh)
+                    {
+                        long end, bytes;
+                        it = new Item { Entries = ReadTail(path, tail, out end, out bytes), End = end };
+                        bytesRead += bytes; read = true;
+                        items[path] = it;
+                    }
+                    else if (size > it.End)
+                    {
+                        var r = ReadLines(path, it.End, MaxTail);
+                        bytesRead += r.Bytes; read = true;
+                        it.Entries.AddRange(ToEntries(r.Lines));
+                        it.End = r.End;
+                    }
+                    if (read) it.Mark = BytesBefore(path, it.End);
+                    Trim(it.Entries);
+                    it.Used = now;
+                    var turn = BuildTurn(it.Entries);
+                    // a tail read that found no complete line ends mid-line: not a place to go on from
+                    if (it.End > 0 && (it.Mark == null || it.Mark.Length == 0 || it.Mark[it.Mark.Length - 1] != 10)) items.Remove(path);
+                    return turn;
+                }
+            }
+
+            // A session not read for an hour (deleted, or gone from the window's list) is dropped; read again, it
+            // starts from the tail.
+            void Prune(DateTime now)
+            {
+                foreach (string k in items.Where(kv => now < kv.Value.Used || (now - kv.Value.Used).TotalHours >= 1).Select(kv => kv.Key).ToList())
+                    items.Remove(k);
+            }
+
+            // Keeps what BuildTurn uses: everything from the last turn_start on and, before it, the newest user
+            // messages, 30 in all.
+            static void Trim(List<Entry> entries)
+            {
+                int s = entries.FindLastIndex(e => e.Type == "start");
+                int lim = s >= 0 ? s : entries.Count;
+                int want = 30;
+                for (int i = lim; i < entries.Count; i++) if (entries[i].Type == "user") want--;
+                var keep = new List<Entry>();
+                for (int i = lim - 1; i >= 0 && keep.Count < want; i--) if (entries[i].Type == "user") keep.Add(entries[i]);
+                if (keep.Count == lim) return;
+                keep.Reverse();
+                entries.RemoveRange(0, lim);
+                entries.InsertRange(0, keep);
+            }
+
+            // The (up to) 64 bytes before pos; null if they cannot be read.
+            static byte[] BytesBefore(string path, long pos)
+            {
+                int n = (int)Math.Min(64L, Math.Max(0L, pos));
+                var b = new byte[n];
+                if (n == 0) return b;
+                try
+                {
+                    using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                    {
+                        if (fs.Length < pos) return null;
+                        fs.Seek(pos - n, SeekOrigin.Begin);
+                        int got = 0;
+                        while (got < n) { int k = fs.Read(b, got, n - got); if (k <= 0) return null; got += k; }
+                        return b;
+                    }
+                }
+                catch { return null; }
+            }
+
+            static bool Same(byte[] a, byte[] b)
+            {
+                if (a == null || b == null || a.Length != b.Length) return false;
+                for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+                return true;
             }
         }
 
@@ -357,10 +500,14 @@ namespace KiroAutoContinue
         public static DateTime? GetKiroStart()
         {
             var ps = Process.GetProcessesByName("Kiro");
-            if (ps.Length == 0) return null;
-            DateTime? min = null;
-            foreach (var p in ps) { try { DateTime t = p.StartTime; if (min == null || t < min.Value) min = t; } catch { } }
-            return min ?? DateTime.MinValue;
+            try
+            {
+                if (ps.Length == 0) return null;
+                DateTime? min = null;
+                foreach (var p in ps) { try { DateTime t = p.StartTime; if (min == null || t < min.Value) min = t; } catch { } }
+                return min ?? DateTime.MinValue;
+            }
+            finally { foreach (var p in ps) p.Dispose(); }   // StartTime opens a handle to each process
         }
 
         // Should this turn be continued now that Kiro has restarted? Marks it (Restart; an open one also Ended,

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: after a few hours it could take several GB of memory and a third of a CPU core. Every few seconds it read the end of each session written in the last day again, 4 MB a session and up to 84 MB for a long one. It now keeps what it has read and reads only what was added since.
+
 ## v0.3 (2026-11-05)
 
 A program with a window instead of a PowerShell script.

@@ -136,6 +136,93 @@ namespace KiroAutoContinue
                 T.Check("a tail read drops the cut first line", () => r4.Lines.Count <= 1 && !r4.Lines.Contains(u1));
             }
             finally { try { File.Delete(tmp); } catch { } }
+
+            // The cache the watcher reads through: the turn a fresh read gives, reading only what was written since
+            // the last read.
+            string sdir = Path.Combine(Path.GetTempPath(), "kac_cache_" + Guid.NewGuid().ToString("N"));
+            string rec = Path.Combine(sdir, "messages.jsonl");
+            Directory.CreateDirectory(sdir);
+            try
+            {
+                var cache = new Records.TurnCache();
+                Func<string> fresh = () => Show(Records.ReadSessionTurn(sdir));
+                var c = cache.Read(sdir);
+                T.Check("cache: no record: an empty turn, nothing kept", () => !c.Ended && c.Users.Count == 0 && cache.Count == 0);
+                File.WriteAllText(rec, u1 + "\n" + start + "\n" + say1 + "\n" + tool + "\n", utf8);
+                c = cache.Read(sdir);
+                long had = cache.BytesRead;
+                T.Check("cache: first read, as a fresh read: running, one tool call", () => Show(c) == fresh() && !c.Ended && c.ToolCalls == 1);
+                T.Check("cache: the first read takes a small record whole", () => had == new FileInfo(rec).Length);
+                cache.Read(sdir);
+                T.Check("cache: nothing new, nothing read", () => cache.BytesRead == had);
+                string more = say2 + "\n" + usage + "\n" + end + "\n";
+                File.AppendAllText(rec, more, utf8);
+                c = cache.Read(sdir);
+                T.Check("cache: the turn ended, as a fresh read says", () => Show(c) == fresh() && c.Ended && c.Credits && c.Final.StartsWith("all done"));
+                T.Check("cache: only the lines added were read", () => cache.BytesRead - had == utf8.GetByteCount(more));
+                string before = Show(c);
+                File.AppendAllText(rec, "{\"id\":\"half", utf8);
+                c = cache.Read(sdir);
+                T.Check("cache: half a line waits for the rest", () => Show(c) == before);
+                File.AppendAllText(rec, "\",\"payload\":{\"type\":\"assistant\",\"content\":\"x\",\"operationType\":\"Think\"}}\n" +
+                    L("user", ",\"content\":\"second task\"") + "\n" + start + "\n" + tool + "\n", utf8);
+                c = cache.Read(sdir);
+                T.Check("cache: the rest of the line and a new turn, as a fresh read", () => Show(c) == fresh() && !c.Ended && c.Users.Count == 2 && c.Users[0] == "second task");
+                c.Users.Clear(); c.Ended = true; c.Footer = "changed";
+                var c2 = cache.Read(sdir);
+                T.Check("cache: a new turn each time, so changing one changes nothing kept", () => Show(c2) == fresh() && c2.Users.Count == 2 && !c2.Ended);
+                File.AppendAllText(rec, askR + "\n", utf8);
+                c = cache.Read(sdir);
+                c.AskOptions.Clear();
+                c2 = cache.Read(sdir);
+                T.Check("cache: a question asked; its options are not shared", () => Show(c2) == fresh() && c2.Ask == "retry" && c2.AskOptions.Contains("Keep Iterating"));
+                File.AppendAllText(rec, resR + "\n", utf8);
+                c = cache.Read(sdir);
+                T.Check("cache: answered: one press counted, as a fresh read", () => Show(c) == fresh() && c.Ask == "" && c.Retries == 1);
+
+                // written anew: shorter, or longer but with other bytes before where the last read ended
+                File.WriteAllText(rec, u1 + "\n" + start + "\n" + aborted + "\n" + L("turn_end", ",\"stopReason\":\"cancelled\"") + "\n", utf8);
+                c = cache.Read(sdir);
+                T.Check("cache: a shorter record is read anew", () => Show(c) == fresh() && c.Cancelled);
+                long len = new FileInfo(rec).Length;
+                File.WriteAllText(rec, L("user", ",\"content\":\"" + new string('b', (int)len) + "\"") + "\n" + start + "\n" + tool + "\n", utf8);
+                c = cache.Read(sdir);
+                T.Check("cache: a longer record written anew is read anew", () => Show(c) == fresh() && !c.Ended && c.Users.Count == 1 && c.Users[0].StartsWith("bbb"));
+
+                // Many turns: it keeps the last turn and, before it, the newest user messages up to 30 in all. A user line
+                // after its turn_start counts among the 30.
+                var many = new List<string>();
+                for (int i = 0; i < 40; i++) many.AddRange(new[] { L("user", ",\"content\":\"task " + i + "\""), start, tool, say2, usage, end });
+                var cache2 = new Records.TurnCache();
+                File.WriteAllText(rec, string.Join("\n", many) + "\n", utf8);
+                c = cache2.Read(sdir);
+                T.Check("cache: 40 turns, as a fresh read: 30 users, newest first", () => Show(c) == fresh() && c.Users.Count == 30 && c.Users[0] == "task 39");
+                T.Check("cache: 40 turns: 30 user lines and the last turn's 5 kept, not " + cache2.Kept(sdir), () => cache2.Kept(sdir) == 35);
+                var added = new List<string>();
+                for (int i = 40; i < 45; i++) added.AddRange(new[] { L("user", ",\"content\":\"task " + i + "\""), start, tool, say2, usage, end });
+                added.AddRange(new[] { start, L("user", ",\"content\":\"late\""), tool });
+                File.AppendAllText(rec, string.Join("\n", added) + "\n", utf8);
+                c = cache2.Read(sdir);
+                T.Check("cache: 6 turns added, a user line inside the last: as a fresh read", () => Show(c) == fresh() && !c.Ended && c.Users[0] == "late" && c.Users[1] == "task 44" && c.Users.Count == 30);
+                T.Check("cache: then 29 user lines and the last turn's 3 kept, not " + cache2.Kept(sdir), () => cache2.Kept(sdir) == 32);
+
+                File.Delete(rec);
+                c = cache2.Read(sdir);
+                T.Check("cache: the record deleted: an empty turn, dropped", () => !c.Ended && c.Users.Count == 0 && cache2.Count == 0);
+            }
+            finally { try { Directory.Delete(sdir, true); } catch { } }
+        }
+
+        // Every field of a turn in one string, to compare a cached read with a fresh one.
+        static string Show(Turn t)
+        {
+            return string.Join("|", new[]
+            {
+                string.Join("\u0001", t.Users), t.Ended.ToString(), t.Credits.ToString(), t.Cancelled.ToString(), t.Recovered.ToString(),
+                t.Restart.ToString(), t.CreditsBack.ToString(), t.Unfinished.ToString(), t.Footer, t.Final, t.Stop, t.ErrorType, t.ErrorText,
+                t.ToolCalls.ToString(), t.Items.ToString(), t.StartedAt, t.EndedAt, t.LastAt, t.Ask, t.AskId, t.AskText, t.AskAt,
+                string.Join("\u0001", t.AskOptions), t.Retries.ToString()
+            });
         }
     }
 }

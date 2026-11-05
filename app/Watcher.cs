@@ -135,11 +135,24 @@ namespace KiroAutoContinue
             var h = OnLog; if (h != null) try { h(line); } catch { }
         }
 
-        Turn ReadTurn(string dir) { return Records.ReadSessionTurn(dir, (long)cfg.Dbl("recordTailBytes", 4194304)); }
+        // Every poll reads the last turn of each session written in the last day (HandleAsks), and of the newest ten
+        // again (BuildSnapshot): through the cache, which reads only what was written since.
+        readonly Records.TurnCache turns = new Records.TurnCache();
+        Turn ReadTurn(string dir) { return turns.Read(dir, (long)cfg.Dbl("recordTailBytes", 4194304)); }
         bool SetRestartCutNow(Turn turn)
         {
-            return Records.SetRestartCut(turn, cfg.Dbl("restartWindowMinutes", 10), Records.GetKiroStart(),
+            return Records.SetRestartCut(turn, cfg.Dbl("restartWindowMinutes", 10), KiroStart(),
                 Json.StrArr(cfg.At("resume", "limitErrors")));
+        }
+
+        // When Kiro started (Records.GetKiroStart), looked up again at most every 2 s: every turn read above checks
+        // it, and each look lists all of Kiro's processes.
+        DateTime? ksSeen; DateTime ksSeenAt = DateTime.MinValue;
+        DateTime? KiroStart()
+        {
+            DateTime now = DateTime.Now;
+            if (now < ksSeenAt || (now - ksSeenAt).TotalSeconds >= 2) { ksSeen = Records.GetKiroStart(); ksSeenAt = now; }
+            return ksSeen;
         }
 
         SessionState StateOf(string id)
@@ -226,7 +239,7 @@ namespace KiroAutoContinue
             if (due > DateTime.Now) { pd.Due = due; pd.Wait = ""; Log(name + " : " + d.Why + "; will send in " + (int)(due - DateTime.Now).TotalSeconds + " s"); return; }
             if (sent >= cfg.Int("resume.maxPerRun", 200)) { pending.Remove(id); WriteNotice("tooMany", name, "NEEDS YOU", d.Why + "; not sent, " + sent + " messages this run already", id); return; }
 
-            DateTime? ks = Records.GetKiroStart();
+            DateTime? ks = KiroStart();
             if (ks == null || (DateTime.Now - ks.Value).TotalSeconds < cfg.Int("kiroStartupSeconds", 60))
             {
                 if (!pd.ToldKiro) { pd.ToldKiro = true; Log(name + " : " + d.Why + "; waiting for Kiro to start up"); }
@@ -549,7 +562,7 @@ namespace KiroAutoContinue
 
         void CheckKiroRestart()
         {
-            DateTime? ks = Records.GetKiroStart();
+            DateTime? ks = KiroStart();
             if (ks != null && ks.Value != DateTime.MinValue && ks != kiroStart)
             {
                 double win = cfg.Dbl("restartWindowMinutes", 10);

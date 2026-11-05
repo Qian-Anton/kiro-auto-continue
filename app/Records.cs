@@ -27,7 +27,7 @@ namespace KiroAutoContinue
     internal sealed class Turn
     {
         public List<string> Users = new List<string>();   // newest first
-        public bool Ended, Credits, Cancelled, Recovered, Restart, CreditsBack;
+        public bool Ended, Credits, Cancelled, Recovered, Restart, CreditsBack, Unfinished;
         public string Footer = "", Final = "", Stop = "", ErrorType = "", ErrorText = "";
         public int ToolCalls, Items;
         public string StartedAt = "", EndedAt = "", LastAt = "";
@@ -246,12 +246,18 @@ namespace KiroAutoContinue
             turn.Final = string.Join("\n", says).Trim();
             turn.Restart = turn.Recovered;
             turn.Cancelled = turn.Stop == "cancelled" && !turn.Recovered;
+            // Kiro ends some long turns while the agent still had work to do, and records no error: end_turn with no
+            // reply after the last tool call, tool_use, or max_tokens. Such a turn counts as cut off. See
+            // docs/how-it-works.md for how often, and what you typed next.
+            bool noReply = turn.Ended && turn.Stop == "end_turn" && !turn.Recovered && turn.Final.Length == 0;
+            turn.Unfinished = noReply || (turn.Ended && !turn.Recovered && (turn.Stop == "tool_use" || turn.Stop == "max_tokens"));
             // Credits is named after the chat footer the first version read; it means the turn ended normally. The
             // number of credits is only shown in Footer: a cut-off turn can have credits too.
-            turn.Credits = turn.Ended && turn.Stop != "error" && !turn.Recovered;
+            turn.Credits = turn.Ended && turn.Stop != "error" && !turn.Recovered && !turn.Unfinished;
 
             var parts = new List<string> { turn.Stop };
             if (turn.Stop == "error" && turn.ErrorType.Length > 0) parts = new List<string> { "error (" + turn.ErrorType + ")" };
+            if (noReply) parts.Add(turn.ToolCalls > 0 ? "no reply after the last tool call" : "no reply");
             if (turn.Recovered) parts.Add("recovered");
             if (usage != null)
             {

@@ -282,8 +282,9 @@ namespace KiroAutoContinue
             }
         }
 
-        // On start: turns cut off (error) in the last 'minutes', which a previous watcher may still have been
-        // about to continue. Out of credits is skipped here: AddCreditWaits puts those on the wait for credits.
+        // On start: turns cut off (error, or ended by Kiro before the agent finished) in the last 'minutes', which a
+        // previous watcher may still have been about to continue. Out of credits is skipped here: AddCreditWaits puts
+        // those on the wait for credits.
         void AddRecentCuts(double minutes)
         {
             DateTime since = DateTime.Now.AddMinutes(-minutes);
@@ -292,7 +293,7 @@ namespace KiroAutoContinue
             {
                 if (pending.ContainsKey(f.Id)) continue;
                 var t = ReadTurn(f.Dir);
-                if (!t.Ended || t.Stop != "error") continue;
+                if (!t.Ended || (t.Stop != "error" && !t.Unfinished)) continue;
                 if (t.ErrorType.Length > 0 && limitErrors.Contains(t.ErrorType)) continue;
                 var end = Records.FromTime(t.EndedAt);
                 if (end == null || end.Value.ToLocalTime() < since) continue;

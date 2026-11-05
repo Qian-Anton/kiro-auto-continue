@@ -538,7 +538,7 @@ namespace KiroAutoContinue
                     Workspace = info.Workspace,
                     Title = info.Title,
                     State = Remote.TurnState(t, rw, DateTime.Now),
-                    Kind = !t.Ended ? "running" : t.Restart ? "restart" : t.Stop == "error" ? "cut" : t.Cancelled ? "stopped" : "done",
+                    Kind = !t.Ended ? "running" : t.Restart ? "restart" : (t.Stop == "error" || t.Unfinished) ? "cut" : t.Cancelled ? "stopped" : "done",
                     Running = !t.Ended,
                     Pending = planned,
                     Plan = planned ? pd.Plan : "",

@@ -190,7 +190,7 @@ namespace KiroAutoContinue
                 at = l.Date == now.Date ? l.ToString("HH:mm") : l.ToString("MM-dd HH:mm");
             }
             string k = "done";
-            if (turn.Stop == "error") k = "cut"; else if (turn.Cancelled) k = "stopped";
+            if (turn.Stop == "error" || turn.Unfinished) k = "cut"; else if (turn.Cancelled) k = "stopped";
             return Policy.FormatText(Json.At(rw, "state", k), new Dictionary<string, string> { { "at", at } }).Trim();
         }
     }

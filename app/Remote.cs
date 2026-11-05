@@ -180,7 +180,11 @@ namespace KiroAutoContinue
         // How a session's last turn stands, for the status reply (rw: words.<lang>.remote).
         public static string TurnState(Turn turn, object rw, DateTime now)
         {
-            if (!turn.Ended) return Json.Str(Json.At(rw, "state", "running"));
+            if (!turn.Ended)
+            {
+                string open = Json.Str(Json.At(rw, "state", turn.Ask == "retry" ? "asking" : turn.Ask.Length > 0 ? "question" : "running"));
+                return open.Length > 0 ? open : Json.Str(Json.At(rw, "state", "running"));
+            }
             if (turn.Restart) return Json.Str(Json.At(rw, "state", "restart"));
             string at = "";
             var end = Records.FromTime(turn.EndedAt);

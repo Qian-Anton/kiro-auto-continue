@@ -31,6 +31,12 @@ namespace KiroAutoContinue
         public string Footer = "", Final = "", Stop = "", ErrorType = "", ErrorText = "";
         public int ToolCalls, Items;
         public string StartedAt = "", EndedAt = "", LastAt = "";
+        // The question Kiro holds a running turn on, if any (a pending_interaction with no interaction_resolved yet).
+        // Ask is "retry" for Kiro's own "keep iterating?", asked after a tool failed several times in a row (options
+        // Cancel / Keep Iterating), and "question" for anything else (the agent's own question, a tool approval).
+        public string Ask = "", AskId = "", AskText = "", AskAt = "";
+        public List<string> AskOptions = new List<string>();
+        public int Retries;   // Kiro's "keep iterating?" questions answered in this turn
     }
 
     // Kiro's own session records: %USERPROFILE%\.kiro\sessions\<workspace>\sess_<id>\. Reading them needs no tab
@@ -132,6 +138,11 @@ namespace KiroAutoContinue
         static readonly Regex RxBoundary = new Regex("\"boundarySource\":\"(\\w+)\"", RegexOptions.Compiled);
         static readonly Regex RxErrType = new Regex("\"errorType\":\"(\\w+)\"", RegexOptions.Compiled);
         static readonly Regex RxErrText = new Regex("\"message\":\"((?:[^\"\\\\]|\\\\.)*)\"", RegexOptions.Compiled);
+        static readonly Regex RxCallId = new Regex("\"toolCallId\":\"([^\"]+)\"", RegexOptions.Compiled);
+
+        // Kiro's own question after a tool failed several times in a row ("I've been trying to use execute_pwsh but
+        // it's failed 7 times in a row..."): its id is failure-intervention-prompt-<n>, its options Cancel and this.
+        public const string RetryPrompt = "failure-intervention-prompt", KeepIterating = "Keep Iterating";
 
         static string Unescape(string inner)
         {
@@ -152,11 +163,14 @@ namespace KiroAutoContinue
 
         sealed class Entry
         {
-            public string Type, Text = "", Stop = "", ErrorType = "", Status = "", At = "";
+            public string Type, Text = "", Stop = "", ErrorType = "", Status = "", At = "", Id = "";
             public bool Recovered;
             public long Ms;
             public double Credits;
+            public List<string> Options = new List<string>();
         }
+
+        static bool IsRetry(Entry e) { return e.Id.StartsWith(RetryPrompt, StringComparison.Ordinal) && e.Options.Contains(KeepIterating); }
 
         static Entry ToEntry(string line)
         {
@@ -197,6 +211,27 @@ namespace KiroAutoContinue
                         };
                     }
                     break;
+                case "pending_interaction":
+                    {
+                        // a short line, so parsed whole for the question and its options
+                        object pl = null;
+                        if (line.Length < 262144) { try { pl = Json.At(Json.Parse(line), "payload"); } catch { } }
+                        var c = RxCallId.Match(line);
+                        e = new Entry { Type = "ask", Id = c.Success ? c.Groups[1].Value : "", Text = Json.Str(Json.At(pl, "question")) };
+                        foreach (object o in Json.Arr(Json.At(pl, "options")))
+                        {
+                            string label = o is string str ? str : Json.Str(Json.At(o, "title"));
+                            if (label.Length == 0) label = Json.Str(Json.At(o, "label"));
+                            if (label.Length > 0) e.Options.Add(label);
+                        }
+                        break;
+                    }
+                case "interaction_resolved":
+                    {
+                        var c = RxCallId.Match(line);
+                        e = new Entry { Type = "answer", Id = c.Success ? c.Groups[1].Value : "" };
+                        break;
+                    }
                 case "usage_summary":
                     {
                         var st = RxStatus.Match(line); var el = RxElapsed.Match(line);
@@ -232,6 +267,7 @@ namespace KiroAutoContinue
 
             turn.StartedAt = entries[s].At; turn.LastAt = entries[s].At;
             var says = new List<string>();
+            var open = new List<Entry>();   // questions asked in this turn, not answered yet
             Entry usage = null;
             for (int i = s + 1; i < entries.Count; i++)
             {
@@ -242,6 +278,18 @@ namespace KiroAutoContinue
                 else if (e.Type == "usage") usage = e;
                 else if (e.Type == "error") { turn.ErrorType = e.ErrorType; turn.ErrorText = e.Text; }
                 else if (e.Type == "end") { turn.Ended = true; turn.Stop = e.Stop; turn.Recovered = e.Recovered; turn.EndedAt = e.At; }
+                else if (e.Type == "ask") open.Add(e);
+                else if (e.Type == "answer")
+                {
+                    int k = open.FindIndex(x => x.Id == e.Id);
+                    if (k >= 0) { if (IsRetry(open[k])) turn.Retries++; open.RemoveAt(k); }
+                }
+            }
+            if (!turn.Ended && open.Count > 0)
+            {
+                var a = open[open.Count - 1];
+                turn.Ask = IsRetry(a) ? "retry" : "question";
+                turn.AskId = a.Id; turn.AskText = a.Text; turn.AskAt = a.At; turn.AskOptions = a.Options;
             }
             turn.Final = string.Join("\n", says).Trim();
             turn.Restart = turn.Recovered;

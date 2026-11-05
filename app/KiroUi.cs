@@ -417,5 +417,33 @@ namespace KiroAutoContinue
             }
             return "the tab still says Working";
         }
+
+        // Press one of the answers Kiro offers under a question in the shown session (Keep Iterating): the newest
+        // button with that name, or, if it is not a button, the nearest thing above that text that can be pressed.
+        // "" once pressed (the caller checks the record for the answer), else why not; "switched" when its tab is no
+        // longer the one shown.
+        public static string PressOption(AutomationElement root, string id, string label)
+        {
+            if (!IsShown(root, id)) return "switched";
+            var all = root.FindAll(TreeScope.Descendants, ByName(label));
+            if (all.Count == 0) return "no " + label + " button";
+            AutomationElement pick = null;
+            for (int i = all.Count - 1; i >= 0 && pick == null; i--)
+                if (all[i].Current.ControlType == ControlType.Button) pick = all[i];
+            object pat;
+            if (pick == null)
+                for (var p = all[all.Count - 1]; p != null && pick == null; p = Walker.GetParent(p))
+                {
+                    if (Automation.Compare(p, root)) break;
+                    if (p.TryGetCurrentPattern(InvokePattern.Pattern, out pat)) pick = p;
+                }
+            if (pick == null) return "the " + label + " text has nothing to press";
+            if (!pick.Current.IsEnabled) return "the " + label + " button is greyed out";
+            if (!pick.TryGetCurrentPattern(InvokePattern.Pattern, out pat)) return "the " + label + " button cannot be pressed";
+            if (!IsShown(root, id)) return "switched";
+            try { ((InvokePattern)pat).Invoke(); }
+            catch (Exception e) { return "pressing " + label + " failed: " + e.Message; }
+            return "";
+        }
     }
 }

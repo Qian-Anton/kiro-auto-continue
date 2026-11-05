@@ -103,6 +103,22 @@ namespace KiroAutoContinue
             t = Get(quoted, start, end);
             T.Check("escaped quotes: " + (t.Users.Count > 0 ? t.Users[0] : "(none)"), () => t.Users[0] == "say \"hi\" and \\\"ok\\\"");
 
+            // A question Kiro holds a running turn on (pending_interaction): its own "keep iterating?" after a tool
+            // kept failing, and the agent's own question. Answered ones (interaction_resolved) are counted.
+            string askR = L("pending_interaction", ",\"toolCallId\":\"failure-intervention-prompt-1793\",\"question\":\"failed 7 times in a row\",\"options\":[{\"title\":\"Cancel\"},{\"title\":\"Keep Iterating\"}]");
+            string resR = L("interaction_resolved", ",\"toolCallId\":\"failure-intervention-prompt-1793\",\"selectedOption\":\"Keep Iterating\"");
+            string askR2 = L("pending_interaction", ",\"toolCallId\":\"failure-intervention-prompt-1888\",\"question\":\"failed again\",\"options\":[{\"title\":\"Cancel\"},{\"title\":\"Keep Iterating\"}]");
+            string askQ = L("pending_interaction", ",\"toolCallId\":\"toolu_bdrk_01ABC\",\"question\":\"Reconnect the VPN?\",\"options\":[{\"title\":\"I reconnected, continue\"},{\"title\":\"Stop\"}]");
+            t = Get(u1, start, tool, askR);
+            T.Check("open keep-iterating question: running, Ask retry, options and text read", () => !t.Ended && t.Ask == "retry" && t.AskOptions.Contains("Keep Iterating") && t.AskText == "failed 7 times in a row");
+            T.Check("open question: nothing pressed yet", () => t.Retries == 0 && t.AskId.EndsWith("1793"));
+            t = Get(u1, start, tool, askR, resR, askR2);
+            T.Check("answered once, asking again: still retry, one press counted, the new id", () => !t.Ended && t.Ask == "retry" && t.Retries == 1 && t.AskId.EndsWith("1888"));
+            t = Get(u1, start, askR, resR, say1, usage, end);
+            T.Check("answered then the turn ended: no open question, the press still counted", () => t.Ended && t.Ask == "" && t.Retries == 1);
+            t = Get(u1, start, tool, askQ);
+            T.Check("the agent's own question: Ask question, not retry", () => !t.Ended && t.Ask == "question" && t.AskOptions.Count == 2);
+
             // Reading the file: from the start, from where the last read ended, and with a line still being written.
             string tmp = Path.GetTempFileName();
             var utf8 = new UTF8Encoding(false);

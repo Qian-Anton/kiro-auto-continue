@@ -13,6 +13,7 @@
   "language": "auto",
   "resume": { "maxTries": 3, "delaysSeconds": [60, 300, 900], "maxPerRun": 200, "catchUpMinutes": 60, "creditWaitHours": 24, "limitErrors": ["UsageLimitReachedError", "OverageLimitReachedError"] },
   "untilDone": { "enabled": true, "maxPushes": 30, "goalEvery": 5, "verifyOnDone": true, "maxIdlePushes": 3, "idleChars": 300 },
+  "keepIterating": { "maxPerTurn": 3 },
   "autoPrefixes": ["（自动续跑）", "（做到完）", "(auto-continue)", "(until-done)"],
   "bareContinue": ["继续", "继续吧", "继续执行", "接着做", "接着来", "continue", "go on", "keep going"],
   "placeholders": ["Ask a question or describe a task..."],
@@ -70,7 +71,9 @@
         "stuck": "做到完模式遇到障碍，需要您介入处理。",
         "idle": "做到完模式连续推送多次但无进展，已自动停止。",
         "maxPushes": "做到完模式推送次数已达上限，已自动停止。",
-        "done": "【做到完】模式的任务已完成。"
+        "done": "【做到完】模式的任务已完成。",
+        "asking": "Kiro 反复失败、一直在问要不要接着试，已替您点过几回，请查看处理。",
+        "question": "Kiro 有个问题在等您回答，请查看处理。"
       },
       "credits": {
         "line": "额度（Kiro {at} 查的）：{plan}本月 {used}/{limit}{bonuses}{over}",
@@ -137,7 +140,7 @@
         "line": "{n}号会话 {name}：{state}",
         "hint": "发送『续 编号』让会话继续执行，或发送『编号 加上任务内容』向会话输入指令。",
         "none": "最近{hours}小时内没有会话记录。",
-        "state": { "running": "正在执行", "done": "已完成 {at}", "cut": "意外中断 {at}", "stopped": "已手动停止 {at}", "restart": "被Kiro重启打断" },
+        "state": { "running": "正在执行", "done": "已完成 {at}", "cut": "意外中断 {at}", "stopped": "已手动停止 {at}", "restart": "被Kiro重启打断", "asking": "Kiro 在问要不要接着试", "question": "Kiro 在等你回答" },
         "pending": "，等待继续执行",
         "untilDone": "，做到完模式已继续执行{pushes}次",
         "needFormat": "，{what}",
@@ -149,7 +152,9 @@
           "stuck": "做到完模式遇到障碍",
           "idle": "做到完模式多次推送无进展",
           "maxPushes": "做到完模式推送次数已达上限",
-          "done": "做到完任务已完成"
+          "done": "做到完任务已完成",
+          "asking": "Kiro 反复失败，一直在问要不要接着试",
+          "question": "Kiro 有个问题在等你回答"
         },
         "continueText": "继续执行",
         "noNumber": "请附带编号，比如『续 2』。先发送『状态』查看会话编号。",
@@ -264,6 +269,7 @@
           "sent.contract": "{n}号会话进入做到完模式",
           "sent.push": "自动继续{n}号会话的执行",
           "sent.pushGoal": "带目标自动继续{n}号会话的执行",
+          "sent.keepIterating": "替{n}号会话点了「继续尝试」",
           "sent.queued": "已向{n}号会话发送手机消息",
           "need": "{n}号会话需要您关注：{need}",
           "done": "{n}号会话的做到完任务已完成",
@@ -336,7 +342,9 @@
         "stuck": "Until-done is stuck and needs you.",
         "idle": "Until-done: several pushes in a row did no work; stopped.",
         "maxPushes": "Until-done: reached the push limit; stopped.",
-        "done": "Until-done: the task is finished."
+        "done": "Until-done: the task is finished.",
+        "asking": "Kiro keeps failing and keeps asking whether to go on. Have a look.",
+        "question": "Kiro has a question waiting for you."
       },
       "credits": {
         "line": "Credits (Kiro checked at {at}): {plan}{used}/{limit} this month{bonuses}{over}",
@@ -403,7 +411,7 @@
         "line": "#{n} {name}: {state}",
         "hint": "Send \"continue <number>\" to have one carry on, or \"<number> <text>\" to type text into it.",
         "none": "No session has written its record in the last {hours} hours.",
-        "state": { "running": "running", "done": "finished {at}", "cut": "cut off {at}", "stopped": "stopped by you {at}", "restart": "cut short by a Kiro restart" },
+        "state": { "running": "running", "done": "finished {at}", "cut": "cut off {at}", "stopped": "stopped by you {at}", "restart": "cut short by a Kiro restart", "asking": "Kiro asks whether to keep trying", "question": "Kiro waits for your answer" },
         "pending": ", about to be continued",
         "untilDone": ", until-done push {pushes}",
         "needFormat": ", {what}",
@@ -415,7 +423,9 @@
           "stuck": "until-done is stuck",
           "idle": "until-done pushes did no work",
           "maxPushes": "until-done reached its push limit",
-          "done": "until-done finished"
+          "done": "until-done finished",
+          "asking": "Kiro keeps failing and asks whether to go on",
+          "question": "Kiro is waiting for your answer"
         },
         "continueText": "continue",
         "noNumber": "Give a number, for example \"continue 2\". Send \"status\" to see the numbers.",
@@ -530,6 +540,7 @@
           "sent.contract": "#{n} started until-done; sent the rules",
           "sent.push": "#{n} stopped; nudged it to go on",
           "sent.pushGoal": "#{n} stopped; nudged it with the goal",
+          "sent.keepIterating": "Pressed Keep Iterating for #{n}",
           "sent.queued": "Sent your phone message to #{n}",
           "need": "#{n} needs you: {need}",
           "done": "#{n} finished its until-done task",

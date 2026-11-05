@@ -164,6 +164,21 @@ namespace KiroAutoContinue
             T.Check("a real message is not bare", () => !Policy.IsBare(TASK, cfg));
             var cfgU = T.Defaults(); T.SetPath(cfgU, false, "untilDone", "enabled");
             T.Check("until-done off in config -> none", () => D(MkTurn(new[] { G }, true, "shall I?"), New(), cfgU).Action == "none");
+
+            // DecideAsk: Kiro's own "keep iterating?" is pressed up to the limit, then it (and any other question) is
+            // handed to you.
+            var ask = new Turn { Ended = false, Ask = "retry", AskText = "failed 7 times", AskId = "failure-intervention-prompt-1" };
+            ask.AskOptions.Add("Cancel"); ask.AskOptions.Add("Keep Iterating");
+            var da = Policy.DecideAsk(ask, cfg);
+            T.Check("retry under the limit -> press Keep Iterating", () => da.Action == "click" && da.Text == "Keep Iterating");
+            ask.Retries = 3;
+            da = Policy.DecideAsk(ask, cfg);
+            T.Check("retry at the limit -> notify, needs you", () => da.Action == "notify" && da.Code == "asking");
+            da = Policy.DecideAsk(new Turn { Ended = false, Ask = "question", AskText = "reconnect the VPN?" }, cfg);
+            T.Check("the agent's own question -> notify", () => da.Action == "notify" && da.Code == "question");
+            T.Check("no open question -> none", () => Policy.DecideAsk(new Turn { Ended = true }, cfg).Action == "none");
+            var cfg0 = T.Defaults(); T.SetPath(cfg0, 0, "keepIterating", "maxPerTurn");
+            T.Check("maxPerTurn 0 -> never press, notify instead", () => Policy.DecideAsk(new Turn { Ended = false, Ask = "retry" }, cfg0).Action == "notify");
         }
     }
 }

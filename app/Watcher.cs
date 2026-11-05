@@ -21,6 +21,14 @@ namespace KiroAutoContinue
         public string Wait = "";   // why it is not sent yet: "" (its delay), idle, kiro, or a retry: notab, draft, retry
     }
 
+    // A running turn that Kiro is holding on a question (a pending_interaction not yet resolved).
+    internal sealed class Asking
+    {
+        public string Dir, AskId = "";
+        public DateTime FirstSeen, NextTry;
+        public bool Told, Notified;
+    }
+
     // One row for the GUI session list.
     internal sealed class SessionRow
     {
@@ -41,6 +49,7 @@ namespace KiroAutoContinue
         readonly Config cfg;
         readonly Dictionary<string, long> read = new Dictionary<string, long>();
         readonly Dictionary<string, Pending> pending = new Dictionary<string, Pending>();
+        readonly Dictionary<string, Asking> asking = new Dictionary<string, Asking>();
         readonly Dictionary<string, SessionState> state = new Dictionary<string, SessionState>();
         readonly Dictionary<string, string> names = new Dictionary<string, string>();
         int sent;
@@ -266,6 +275,104 @@ namespace KiroAutoContinue
             }
         }
 
+        // Kiro holds some running turns on a question (a pending_interaction): its own "keep iterating?" after a
+        // tool failed several times, or a real question from the agent. Track those, and once the keyboard and mouse
+        // have been idle a while (so you answer it yourself when you are here), press Keep Iterating for the first
+        // kind, up to keepIterating.maxPerTurn times a turn, or send a notice for the rest. One is acted on per poll.
+        void HandleAsks()
+        {
+            DateTime since = DateTime.Now.AddHours(-cfg.Dbl("remote.listHours", 24));
+            var live = new HashSet<string>();
+            foreach (var f in Records.GetSessionFiles().Where(f => f.Modified >= since))
+            {
+                var turn = ReadTurn(f.Dir); SetRestartCutNow(turn);
+                if (turn.Ended || turn.Ask.Length == 0) continue;
+                live.Add(f.Id);
+                Asking a;
+                if (!asking.TryGetValue(f.Id, out a))
+                {
+                    var info = Records.GetSessionInfo(f.Dir); if (info == null) { live.Remove(f.Id); continue; }
+                    names[f.Id] = info.Workspace + " | " + info.Title;
+                    a = new Asking { Dir = f.Dir, AskId = turn.AskId, FirstSeen = DateTime.Now };
+                    asking[f.Id] = a;
+                    Log(names[f.Id] + " : Kiro is waiting on a question [" + Policy.Short(turn.AskText, 80) + "]");
+                }
+                else if (a.AskId != turn.AskId)   // a fresh question replaced the one we saw
+                {
+                    a.AskId = turn.AskId; a.Dir = f.Dir; a.FirstSeen = DateTime.Now; a.NextTry = DateTime.MinValue; a.Told = false; a.Notified = false;
+                }
+            }
+            foreach (string id in asking.Keys.ToList())
+            {
+                if (live.Contains(id)) continue;
+                asking.Remove(id);
+                string c; if (attention.TryGetValue(id, out c) && (c == "asking" || c == "question")) attention.Remove(id);
+            }
+            DateTime now = DateTime.Now;
+            foreach (string id in asking.Keys.ToList())
+            {
+                if (now < asking[id].NextTry) continue;
+                try { if (LookAsk(id)) break; }
+                catch (Exception e) { Log(Name(id) + " : error while handling its question: " + e.Message); asking[id].NextTry = now.AddSeconds(30); break; }
+            }
+        }
+
+        // One session Kiro holds on a question. Returns true once it has acted (pressed or sent a notice), so only
+        // one session is acted on per poll.
+        bool LookAsk(string id)
+        {
+            Asking a = asking[id];
+            var info = Records.GetSessionInfo(a.Dir);
+            if (info == null) { asking.Remove(id); return false; }
+            string name = info.Workspace + " | " + info.Title; names[id] = name;
+            Turn turn = ReadTurn(a.Dir); SetRestartCutNow(turn);
+            if (turn.Ended || turn.Ask.Length == 0) { asking.Remove(id); return false; }
+
+            Decision d = Policy.DecideAsk(turn, cfg);
+            if (d.Action == "none") return false;
+            if (d.Action == "notify")
+            {
+                if (a.Notified) return false;
+                a.Notified = true;
+                WriteNotice(d.Code, name, "NEEDS YOU", d.Why, id);
+                return true;
+            }
+            // d.Action == "click": only once the keyboard and mouse have been idle, like a resume
+            int idleNeed = cfg.Int("idleSeconds", 180);
+            if (Native.IdleSeconds() < idleNeed)
+            {
+                if (!a.Told) { a.Told = true; Log(name + " : " + d.Why + "; will press once keyboard and mouse have been idle for " + idleNeed + " s"); }
+                return false;
+            }
+            a.NextTry = DateTime.Now.AddSeconds(15);   // do not press again until the record has had time to update
+
+            var found = KiroUi.FindSessionTab(info);
+            if (found.Count != 1)
+            {
+                if (!a.Notified) { a.Notified = true; WriteNotice("question", name, "NEEDS YOU", d.Why + "; " + (found.Count == 0 ? "its tab is not open in Kiro" : "several tabs have its title"), id); }
+                return true;
+            }
+            var root = found.Hit.Root; var tab = found.Hit.Tab;
+            string locked = KiroUi.Locked() ? " (screen locked)" : "";
+            var back = KiroUi.GetTabs(root).FirstOrDefault(t => t.Selected);
+            try
+            {
+                if (!KiroUi.ShowTab(root, tab.Id)) { Log(name + " : could not switch to its tab to answer" + locked); return true; }
+                string err = KiroUi.PressOption(root, tab.Id, Records.KeepIterating);
+                for (int i = 0; i < 10 && err.StartsWith("no ", StringComparison.Ordinal); i++) { Thread.Sleep(500); err = KiroUi.PressOption(root, tab.Id, Records.KeepIterating); }
+                if (err.Length > 0) { Log(name + " : could not press Keep Iterating: " + err + locked); return true; }
+                bool ok = false;
+                for (int i = 0; i < 15 && !ok; i++) { Thread.Sleep(1000); var t = ReadTurn(a.Dir); ok = t.Ended || t.Ask.Length == 0 || t.AskId != turn.AskId || t.Retries > turn.Retries; }
+                if (ok) { Log(name + " : pressed Keep Iterating [" + Policy.Short(turn.AskText, 60) + "]" + locked); Act("sent.keepIterating", id); a.Told = false; }
+                else Log(name + " : pressed Keep Iterating but its question is still open" + locked);
+                return true;
+            }
+            finally
+            {
+                if (back != null && back.Id != tab.Id && KiroUi.IsShown(root, tab.Id)) KiroUi.ShowTab(root, back.Id);
+            }
+        }
+
         // On start: turns a Kiro restart cut short, from records written since 'since'.
         void AddRestartCuts(DateTime since, DateTime ks)
         {
@@ -369,6 +476,7 @@ namespace KiroAutoContinue
                             try { Look(due); }
                             catch (Exception e) { Log(Name(due) + " : error while looking at it: " + e.Message); WaitLook(due, "error"); }
                         }
+                        HandleAsks();
                     }
                     BuildSnapshot();
                 }

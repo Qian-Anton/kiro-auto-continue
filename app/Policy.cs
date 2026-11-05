@@ -240,6 +240,26 @@ namespace KiroAutoContinue
             return dp;
         }
 
+        // What to do about the question a running turn waits on (Turn.Ask). Kiro's own "keep iterating?" gets
+        // Keep Iterating pressed, at most keepIterating.maxPerTurn times in one turn (0: never): after that it may
+        // really be going round in circles. Past that, and for any other question (the agent's own, a tool
+        // approval), you get a notice. Action: "click" (Text is the button), "notify" (Code is the notice), "none".
+        public static Decision DecideAsk(Turn turn, Config cfg)
+        {
+            if (turn.Ended || turn.Ask.Length == 0) return Dec("none", "no open question");
+            string q = "[" + Short(turn.AskText, 80) + "]";
+            if (turn.Ask != "retry")
+                return Dec("notify", "Kiro waits for your answer " + q + " (" + string.Join(" / ", turn.AskOptions) + ")", "question");
+            int max = Json.Int(cfg.At("keepIterating", "maxPerTurn"), 3);
+            if (max <= 0)
+                return Dec("notify", "Kiro asks whether to keep trying " + q + "; pressing Keep Iterating is switched off", "asking");
+            if (turn.Retries >= max)
+                return Dec("notify", "Kiro asks whether to keep trying " + q + " again; Keep Iterating was pressed " + turn.Retries + " times in this turn already", "asking");
+            var d = Dec("click", "Kiro asks whether to keep trying " + q + " (" + (turn.Retries + 1) + " of at most " + max + " in this turn)");
+            d.Text = Records.KeepIterating;
+            return d;
+        }
+
         // What "continue N" from your phone types.
         public static string ManualContinue(Turn turn, Config cfg)
         {

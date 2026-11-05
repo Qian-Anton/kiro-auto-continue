@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -139,6 +140,20 @@ namespace KiroAutoContinue
         // again (BuildSnapshot): through the cache, which reads only what was written since.
         readonly Records.TurnCache turns = new Records.TurnCache();
         Turn ReadTurn(string dir) { return turns.Read(dir, (long)cfg.Dbl("recordTailBytes", 4194304)); }
+
+        // After 16 MB more read from the records, collect the garbage at once. The first round reads the tail of every
+        // session written in the last day (4 MB each, more for a long one); those buffers are garbage straight away,
+        // but so little is allocated after that that .NET may not collect them for a long time (11-05: 500 MB held
+        // for minutes after starting, most of it that garbage).
+        long collectedAt;
+        void CollectAfterReads()
+        {
+            long r = turns.BytesRead;
+            if (r - collectedAt < 16L << 20) return;
+            collectedAt = r;
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect();
+        }
         bool SetRestartCutNow(Turn turn)
         {
             return Records.SetRestartCut(turn, cfg.Dbl("restartWindowMinutes", 10), KiroStart(),
@@ -503,6 +518,7 @@ namespace KiroAutoContinue
                         HandleAsks();
                     }
                     BuildSnapshot();
+                    CollectAfterReads();
                 }
                 catch (Exception e) { Log("error: " + e.Message); }
                 DateTime wake = DateTime.Now.AddSeconds(cfg.Int("pollSeconds", 5));

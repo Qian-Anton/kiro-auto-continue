@@ -150,7 +150,8 @@ namespace KiroAutoContinue
                 { "stuck", Json.Str(Json.At(w, "marks", "stuck")) }
             };
 
-            // Interrupted: the footer shows the elapsed time, no credits.
+            // Interrupted: the record says error, or a Kiro restart cut the turn short. A cut-off can show credits in
+            // the chat footer too; the number of credits plays no part here.
             if (!turn.Credits || turn.Cancelled)
             {
                 var limitErrors = Json.StrArr(cfg.At("resume", "limitErrors"));

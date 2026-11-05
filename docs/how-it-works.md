@@ -10,7 +10,7 @@ It reads each session's record (`messages.jsonl`, see "Kiro's session records" b
 
 | The turn ended with | What it does |
 |---|---|
-| `error` (cut off; the footer shows no credits) | Sends the continue message, which quotes your last task: "the last turn was interrupted; if you remember what you were doing, pick up from there and do not start over; otherwise here is my message". Waits 1, 5, then 15 minutes before each try. After 3 cut-offs in a row it leaves the session and logs `NEEDS YOU`. A normal finish resets the count. |
+| `error` (cut off) | Sends the continue message, which quotes your last task: "the last turn was interrupted; if you remember what you were doing, pick up from there and do not start over; otherwise here is my message". Waits 1, 5, then 15 minutes before each try. After 3 cut-offs in a row it leaves the session and logs `NEEDS YOU`. A normal finish resets the count. |
 | `error` because the credits ran out (`UsageLimitReachedError`, `OverageLimitReachedError`) | Logs `NEEDS YOU - out of credits` and does not retry. It continues once another session finishes a turn normally, or once Kiro has restarted. |
 | Cut short by a Kiro restart | Once Kiro has been up for a minute, sends the continue message, which also says terminals and background processes may be gone. See "What a Kiro restart leaves in the records" below. |
 | `cancelled` (you pressed stop) | Nothing. Also ends until-done for that session. |
@@ -42,7 +42,7 @@ Right before it types, presses send or presses stop, it checks once more that th
   - `turn_start`, then for the agent `assistant` (the visible text has `operationType: "Say"`) and `tool_call` / `tool_result`.
   - `usage_summary`: `status` (`success`, `aborted`, `failed`), `elapsedTime` in ms, and credits in `promptTurnSummaries[].usage`.
   - `turn_end`: `stopReason` is `end_turn` (finished), `cancelled` (the user pressed stop) or `error` (cut off).
-- In one workspace's history: 399 `end_turn`, 111 `cancelled`, 70 `error`. A turn stopped early by the user can have zero credits, so the chat footer looks just like a cut-off. The record still says `cancelled`.
+- In one workspace's history: 399 `end_turn`, 111 `cancelled`, 70 `error`. The chat footer does not tell them apart: a turn stopped early by the user can have zero credits, as a cut-off often does, and a cut-off shows the credits it used before the cut (across all workspaces, 166 of the 283 `error` turns from 08-31 to 11-05 had some). The record still says `cancelled` or `error`. Only `stopReason` decides; the credits only go into the log.
 - Lines can be megabytes (images, tool output). `app/Records.cs` pulls fields out with regexes instead of parsing whole lines, and reads only the tail of the file.
 - Every `error` turn has a `session_metadata` line with `key: "displayError"` before its `turn_end`: the error the chat showed, as `value.errorType` and `value.message`. Across all workspaces (197 errors): `ConnectionResetError` 65, `ModelThrottleError` 51, `UsageLimitReachedError` 30, `ClientNetworkError` 12, `ClientThrottleError` 7, `OverageLimitReachedError` 4, and a long tail (bad images, content filter, proxy, sign-in). The two limit errors mean the account is out of credits; retrying on it cannot work.
 - Kiro writes a few `user` lines itself, mid-turn, marked `_meta.kiro.syntheticUserMessageReason` (`max-tokens-recovery`, `fallback-continuation`; 19 of 8969). They are not the user's task. Whether the chat panel shows them has not been checked.

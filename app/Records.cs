@@ -246,6 +246,8 @@ namespace KiroAutoContinue
             turn.Final = string.Join("\n", says).Trim();
             turn.Restart = turn.Recovered;
             turn.Cancelled = turn.Stop == "cancelled" && !turn.Recovered;
+            // Credits is named after the chat footer the first version read; it means the turn ended normally. The
+            // number of credits is only shown in Footer: a cut-off turn can have credits too.
             turn.Credits = turn.Ended && turn.Stop != "error" && !turn.Recovered;
 
             var parts = new List<string> { turn.Stop };

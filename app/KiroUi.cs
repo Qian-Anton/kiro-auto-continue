@@ -418,31 +418,47 @@ namespace KiroAutoContinue
             return "the tab still says Working";
         }
 
-        // Press one of the answers Kiro offers under a question in the shown session (Keep Iterating): the newest
-        // button with that name, or, if it is not a button, the nearest thing above that text that can be pressed.
-        // "" once pressed (the caller checks the record for the answer), else why not; "switched" when its tab is no
-        // longer the one shown.
-        public static string PressOption(AutomationElement root, string id, string label)
+        // The newest on-screen element of a given type with this exact name; null if none. The live prompt's option
+        // is on screen, while the same words sitting in the scrolled-back transcript are off screen, so this does not
+        // pick a stale copy.
+        static AutomationElement OnScreenNamed(AutomationElement root, string name, ControlType type)
+        {
+            AutomationElement hit = null;
+            foreach (AutomationElement e in root.FindAll(TreeScope.Descendants, ByName(name)))
+            {
+                try { if (e.Current.IsOffscreen || e.Current.ControlType != type) continue; } catch { continue; }
+                hit = e;   // last match: the live prompt is the newest in the tree
+            }
+            return hit;
+        }
+
+        // Answer the question in the shown session: select the radio option named 'option', then press the 'submit'
+        // button (Kiro's prompts are a radio group plus a "Submit answer" button; selecting the radio alone does not
+        // send it). "" once submitted (the caller confirms from the record), else why not; "switched" when its tab is
+        // no longer the one shown. The option/submit are UI Automation RadioButton/Button; InvokePattern alone on the
+        // radio does nothing, so the radio is set with SelectionItemPattern.
+        public static string PressOption(AutomationElement root, string id, string option, string submit)
         {
             if (!IsShown(root, id)) return "switched";
-            var all = root.FindAll(TreeScope.Descendants, ByName(label));
-            if (all.Count == 0) return "no " + label + " button";
-            AutomationElement pick = null;
-            for (int i = all.Count - 1; i >= 0 && pick == null; i--)
-                if (all[i].Current.ControlType == ControlType.Button) pick = all[i];
+            var radio = OnScreenNamed(root, option, ControlType.RadioButton);
+            if (radio == null) return "no " + option + " option on screen";
+            if (!radio.Current.IsEnabled) return option + " is disabled";
             object pat;
-            if (pick == null)
-                for (var p = all[all.Count - 1]; p != null && pick == null; p = Walker.GetParent(p))
-                {
-                    if (Automation.Compare(p, root)) break;
-                    if (p.TryGetCurrentPattern(InvokePattern.Pattern, out pat)) pick = p;
-                }
-            if (pick == null) return "the " + label + " text has nothing to press";
-            if (!pick.Current.IsEnabled) return "the " + label + " button is greyed out";
-            if (!pick.TryGetCurrentPattern(InvokePattern.Pattern, out pat)) return "the " + label + " button cannot be pressed";
+            try
+            {
+                if (radio.TryGetCurrentPattern(SelectionItemPattern.Pattern, out pat)) ((SelectionItemPattern)pat).Select();
+                else if (radio.TryGetCurrentPattern(InvokePattern.Pattern, out pat)) ((InvokePattern)pat).Invoke();
+                else return option + " cannot be selected";
+            }
+            catch (Exception e) { return "selecting " + option + " failed: " + e.Message; }
+            Thread.Sleep(300);
             if (!IsShown(root, id)) return "switched";
+            var btn = OnScreenNamed(root, submit, ControlType.Button);
+            if (btn == null) return "no " + submit + " button";
+            if (!btn.Current.IsEnabled) return submit + " is disabled";
+            if (!btn.TryGetCurrentPattern(InvokePattern.Pattern, out pat)) return submit + " cannot be pressed";
             try { ((InvokePattern)pat).Invoke(); }
-            catch (Exception e) { return "pressing " + label + " failed: " + e.Message; }
+            catch (Exception e) { return "pressing " + submit + " failed: " + e.Message; }
             return "";
         }
     }

@@ -13,7 +13,7 @@
   "language": "auto",
   "resume": { "maxTries": 3, "delaysSeconds": [60, 300, 900], "maxPerRun": 200, "catchUpMinutes": 60, "creditWaitHours": 24, "limitErrors": ["UsageLimitReachedError", "OverageLimitReachedError"] },
   "untilDone": { "enabled": true, "maxPushes": 30, "goalEvery": 5, "verifyOnDone": true, "maxIdlePushes": 3, "idleChars": 300 },
-  "keepIterating": { "maxPerTurn": 3 },
+  "keepIterating": { "maxPerTurn": 3, "submitLabel": "Submit answer" },
   "autoPrefixes": ["（自动续跑）", "（做到完）", "(auto-continue)", "(until-done)"],
   "bareContinue": ["继续", "继续吧", "继续执行", "接着做", "接着来", "continue", "go on", "keep going"],
   "placeholders": ["Ask a question or describe a task..."],

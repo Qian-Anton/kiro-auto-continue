@@ -27,6 +27,7 @@ namespace KiroAutoContinue
         public string Dir, AskId = "";
         public DateTime FirstSeen, NextTry;
         public bool Told, Notified;
+        public int Attempts;   // presses we made for the current AskId (resets when the question changes)
     }
 
     // One row for the GUI session list.
@@ -299,7 +300,7 @@ namespace KiroAutoContinue
                 }
                 else if (a.AskId != turn.AskId)   // a fresh question replaced the one we saw
                 {
-                    a.AskId = turn.AskId; a.Dir = f.Dir; a.FirstSeen = DateTime.Now; a.NextTry = DateTime.MinValue; a.Told = false; a.Notified = false;
+                    a.AskId = turn.AskId; a.Dir = f.Dir; a.FirstSeen = DateTime.Now; a.NextTry = DateTime.MinValue; a.Told = false; a.Notified = false; a.Attempts = 0;
                 }
             }
             foreach (string id in asking.Keys.ToList())
@@ -344,6 +345,14 @@ namespace KiroAutoContinue
                 if (!a.Told) { a.Told = true; Log(name + " : " + d.Why + "; will press once keyboard and mouse have been idle for " + idleNeed + " s"); }
                 return false;
             }
+            // safety net: if our presses for this one question did not take (the record shows no answer), stop after
+            // maxPerTurn tries and hand it over, so a press that never registers cannot loop.
+            int max = cfg.Int("keepIterating.maxPerTurn", 3);
+            if (a.Attempts >= max)
+            {
+                if (!a.Notified) { a.Notified = true; WriteNotice("asking", name, "NEEDS YOU", "pressed Keep Iterating " + a.Attempts + " times but the question stayed open", id); }
+                return true;
+            }
             a.NextTry = DateTime.Now.AddSeconds(15);   // do not press again until the record has had time to update
 
             var found = KiroUi.FindSessionTab(info);
@@ -353,13 +362,15 @@ namespace KiroAutoContinue
                 return true;
             }
             var root = found.Hit.Root; var tab = found.Hit.Tab;
+            string submit = cfg.Str("keepIterating.submitLabel", "Submit answer");
             string locked = KiroUi.Locked() ? " (screen locked)" : "";
             var back = KiroUi.GetTabs(root).FirstOrDefault(t => t.Selected);
             try
             {
                 if (!KiroUi.ShowTab(root, tab.Id)) { Log(name + " : could not switch to its tab to answer" + locked); return true; }
-                string err = KiroUi.PressOption(root, tab.Id, Records.KeepIterating);
-                for (int i = 0; i < 10 && err.StartsWith("no ", StringComparison.Ordinal); i++) { Thread.Sleep(500); err = KiroUi.PressOption(root, tab.Id, Records.KeepIterating); }
+                a.Attempts++;
+                string err = KiroUi.PressOption(root, tab.Id, Records.KeepIterating, submit);
+                for (int i = 0; i < 10 && err.StartsWith("no ", StringComparison.Ordinal); i++) { Thread.Sleep(500); err = KiroUi.PressOption(root, tab.Id, Records.KeepIterating, submit); }
                 if (err.Length > 0) { Log(name + " : could not press Keep Iterating: " + err + locked); return true; }
                 bool ok = false;
                 for (int i = 0; i < 15 && !ok; i++) { Thread.Sleep(1000); var t = ReadTurn(a.Dir); ok = t.Ended || t.Ask.Length == 0 || t.AskId != turn.AskId || t.Retries > turn.Retries; }

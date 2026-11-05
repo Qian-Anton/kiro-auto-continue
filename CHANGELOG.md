@@ -10,6 +10,8 @@ A program with a window instead of a PowerShell script.
 - The credits as Kiro last reported them: in a box of their own on the Sessions page, one bar for this month's and one for the trial credits, with when Kiro checked and how long ago that was. The phone's `status` and the morning summary carry the same numbers in one line.
 - Settings, the log and the pairing are kept in `%APPDATA%\KiroAutoContinue`.
 - A turn that Kiro ends while the agent is still working is continued like a cut-off. Kiro records no error for it: the turn ends right after a tool result with no reply, or with `tool_use` or `max_tokens`, and the chat shows it like a finished turn, credits and all.
+- When Kiro stops a turn to ask whether to keep trying after a tool kept failing, it presses Keep Iterating for you, up to three times a turn (`keepIterating.maxPerTurn`, 0 to turn it off). Any other question it leaves for you with a notice.
+- The Chinese wording of the window, the phone replies and the notices was gone over.
 - Fixed: a session cut off again right after it was continued could not be continued any more. Switching tabs just as it was about to type or press stop could make it act on your tab instead. A stop from the window or the phone could be reported as failed although the turn had ended.
 - The PowerShell script is no longer in the repository. It stays available as v0.2.
 

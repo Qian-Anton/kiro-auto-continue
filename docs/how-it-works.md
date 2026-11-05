@@ -22,6 +22,8 @@ It reads each session's record (`messages.jsonl`, see "Kiro's session records" b
 
 Until-done also stops after `untilDone.maxPushes` pushes, after 3 pushes in a row that did no work (no tool calls and a short reply), or when you send a new message without the mark.
 
+While a turn is still running, Kiro sometimes stops it to ask a question (a `pending_interaction`, see "Kiro's session records"). Its own "I've been trying to use X but it's failed N times in a row — keep iterating?" (options Cancel / Keep Iterating) is answered for you: once the keyboard and mouse have been idle `idleSeconds`, as for a resume, it selects Keep Iterating and presses Submit answer, up to `keepIterating.maxPerTurn` times in a turn. Past that — or for any other question, such as the agent's own, which only you should answer — it logs `NEEDS YOU` and sends a notice. Pressing is a safe default because this is the choice you have made every time; set `keepIterating.maxPerTurn` to 0 to leave every such prompt for you. How the option is pressed is under "The chat panel through UI Automation".
+
 ## Typing into Kiro
 
 Only when there is something to send, and only after `idleSeconds` without keyboard or mouse input (`remote.idleSeconds` for commands from your phone; a click on Continue or Stop in the window does not wait, since you are in the window and not typing into Kiro):
@@ -43,6 +45,7 @@ Right before it types, presses send or presses stop, it checks once more that th
   - `turn_start`, then for the agent `assistant` (the visible text has `operationType: "Say"`) and `tool_call` / `tool_result`.
   - `usage_summary`: `status` (`success`, `aborted`, `failed`), `elapsedTime` in ms, and credits in `promptTurnSummaries[].usage`.
   - `turn_end`: `stopReason` is `end_turn` (finished), `cancelled` (the user pressed stop) or `error` (cut off).
+  - `pending_interaction` while a turn runs: Kiro waits for an answer, and the turn has no `turn_end` until `interaction_resolved` with the same `toolCallId` closes it. A `toolCallId` starting `failure-intervention-prompt`, with `Keep Iterating` among its `options`, is Kiro's own "keep iterating?" after a tool kept failing; a `toolu_...` id is the agent's own question. `app/Records.cs` carries the open one on the turn (`Turn.Ask`, `AskOptions`) and counts the retry prompts already answered this turn (`Turn.Retries`).
 - In one workspace's history: 399 `end_turn`, 111 `cancelled`, 70 `error`. The chat footer does not tell them apart: a turn stopped early by the user can have zero credits, as a cut-off often does, and a cut-off shows the credits it used before the cut (across all workspaces, 166 of the 283 `error` turns from 08-31 to 11-05 had some). The record still says `cancelled` or `error`. The credits only go into the log.
 - Kiro also ends some long turns while the agent is still working, and records no error. Either the turn ends with `end_turn` right after a tool result, with nothing said after the last tool call (`tool_call`, `tool_result`, `usage_summary`, a `session_event` with `session_pause`, `turn_end`, all in the same second), or `stopReason` is `tool_use` or `max_tokens`. The chat shows it like a finished turn, credits and all. From 08-30 to 11-05, across all workspaces: 41 of the 1096 `end_turn` turns had no reply after the last tool call, 6 turns ended with `tool_use` and 2 with `max_tokens`. Most ran 1 to 5 hours with 300 to 620 tool calls. After 47 of these 49 your next message asked to continue, said it had been cut off, or asked how far it had got (one has no next message yet, one was a new question 6.5 hours later). After the 1055 `end_turn` turns with a reply, it was a bare continue 33 times. The program counts these turns as cut off (`Turn.Unfinished` in `app/Records.cs`).
 - Lines can be megabytes (images, tool output). `app/Records.cs` pulls fields out with regexes instead of parsing whole lines, and reads only the tail of the file.
@@ -81,6 +84,7 @@ So the program counts a turn as cut short by a restart when it is still open and
 - A turn that ended before Kiro wrote anything (cut off within seconds, or stopped at once), and a turn that has only just begun, have no "Kiro" label yet: then the newest checkpoint bar comes after the newest label, and the user message is what follows that bar (`app/Panel.cs`).
 - Markdown in a user message is rendered. A line of only `=` or `-` turns the line above it into a heading.
 - The chat box (`chat-input-content`, TipTap) has no ValuePattern. The text is set through MSAA instead: walk the render window's MSAA tree to the node with the chat box's bounds, then call `set_accValue`. Chromium turns that into setInnerText, and the editor picks it up. The send button (`codicon-arrow-up`) is pressed with `InvokePattern`, and so is the stop button, which is named `Cancel` and exists only while a turn runs.
+- A question Kiro holds a turn on is a radio group (`RadioButton` options, e.g. `Cancel` / `Keep Iterating`) with a separate `Submit answer` button. `InvokePattern` on the option does nothing; the option is set with `SelectionItemPattern.Select`, and then the `Submit answer` button is pressed with `InvokePattern` (selecting the option alone does not send it). Only on-screen elements are used (`IsOffscreen` false), so the same option words sitting in the scrolled-back transcript are not matched; the submit button's name is `keepIterating.submitLabel`, in case Kiro renames it.
 
 ## Timing
 
@@ -177,6 +181,8 @@ The defaults are built into the exe (`app/config.default.json`). `%APPDATA%\Kiro
 | `untilDone.goalEvery` | 5 | Repeat the goal every this many pushes. |
 | `untilDone.verifyOnDone` | true | The first `[DONE]` gets a request to check the goal item by item. |
 | `untilDone.maxIdlePushes`, `untilDone.idleChars` | 3, 300 | Stop after this many pushes in a row with no tool calls and a reply shorter than this. |
+| `keepIterating.maxPerTurn` | 3 | Press Keep Iterating on Kiro's own "keep trying?" prompt at most this many times in a turn. 0: never, every such prompt is left for you. |
+| `keepIterating.submitLabel` | Submit answer | The name of the prompt's submit button, in case Kiro renames it. |
 | `language` | auto | `zh` or `en`. With `auto`, the window and the notices follow Windows' language, and the messages it types follow the language of your task. |
 | `words.zh`, `words.en` | | The marks, every message it sends, and every word of the window. Lines of only `=` or `-` would make Kiro render the line above as a heading, so avoid them. |
 | `autoPrefixes`, `bareContinue` | | How its own messages start (never quoted as your task), and messages such as "continue" that are not a task (it quotes the one before). |

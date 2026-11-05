@@ -13,6 +13,7 @@ kiro-auto-continue watches your Kiro sessions in the background. When one stops 
 - After Kiro restarts, it continues the sessions that were running.
 - If the credits ran out, it does not retry. It continues after Kiro restarts, or once another session gets through a turn again, which means the credits are back.
 - Until-done mode, if you want it: the agent keeps working instead of stopping to ask whether to go on.
+- When Kiro stops a turn to ask whether to keep trying (its own prompt after a tool fails several times in a row), it answers Keep Iterating for you, up to three times in a turn. Any other question, including the agent's own, it leaves for you and sends a notice to your phone.
 - Its window lists your recent sessions and what each one is doing, with Continue and Stop buttons, and below them what it did lately.
 - The Sessions page has a box with the credits as Kiro last reported them (the same numbers as Kiro's status bar): a bar for this month's and one for the trial credits, with when Kiro checked and how long ago that was.
 - Notices on your phone, and commands from your phone, through WeCom, if you set them up.

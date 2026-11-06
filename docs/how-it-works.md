@@ -125,6 +125,7 @@ Measured with the script version (11-02); the exe drives Kiro the same way.
 - The session list is the records written in the last `remote.listHours`, at most `remote.maxList`, the same list as the phone's `status`. "Recent" is kept in `activity.jsonl` and is worded in the window's language when shown.
 - "Start with Windows" writes `"<exe>" --tray` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. If the exe was moved, the entry is pointed at the new place the next time it starts.
 - The window's language is the `language` setting, or Windows' own language with `auto`. The messages it types into Kiro follow `language` too, but `auto` there means the language of your task.
+- The window is drawn by the CPU (WPF's `RenderMode.SoftwareOnly`, set in `Program.Main`). Drawn by the graphics card, it made the graphics driver map memory into the program and keep it for as long as the program ran, also with the window hidden in the tray. Measured on 11-06 on one PC (Intel Arc integrated graphics, 200% scaling), the window open off screen with its pulse and its 1 s refresh running: drawn by the card, 350 to 410 MB of private memory, 230 MB of it the driver's; drawn by the CPU, 80 to 110 MB. CPU time: 5.2 to 5.5% of one core with the card, 6.3 to 6.7% without; with the window hidden nothing is drawn either way. Where both captures show the same thing, they differ by at most 2/255 in the text and 46/255 in a few pixels elsewhere, with ClearType in both.
 
 ## Where it keeps things
 

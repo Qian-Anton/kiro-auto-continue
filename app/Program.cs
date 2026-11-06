@@ -18,6 +18,12 @@ namespace KiroAutoContinue
                 catch { return 1; }
             }
             Native.SetProcessDPIAware();
+            // The window is drawn by the CPU, not the graphics card. Once WPF has drawn with the card, the driver keeps
+            // its memory for as long as the program runs, also with the window closed to the tray: on the PC this was
+            // measured on (Intel Arc, 200%), 230 MB of it, 410 MB in all with the window open against 80-110 MB
+            // drawn by the CPU. The cost is 1 to 1.5 points of one CPU core more while the window is open (its pulse
+            // and 1 s refresh), nothing while it is hidden; it looks the same. Set before any window exists.
+            System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
             if (opt.Preview) return Preview.Run(opt);
 
             bool created;

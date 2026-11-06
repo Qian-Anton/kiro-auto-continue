@@ -16,7 +16,7 @@
     <DebugType>embedded</DebugType>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <Product>Kiro Auto Continue</Product>
     <Company>Yuntao Qian</Company>
     <AssemblyTitle>Kiro Auto Continue</AssemblyTitle>

@@ -3,7 +3,8 @@
 ## Unreleased
 
 - Fixed: after a few hours it could take several GB of memory and a third of a CPU core. Every few seconds it read the end of each session written in the last day again, 4 MB a session and up to 84 MB for a long one. It now keeps what it has read and reads only what was added since.
-- Fixed: a session that renamed itself while its Kiro window was minimized could not be continued. A minimized window keeps showing the old title on the tab, so the tab was not found. It now has the window bring its tab titles up to date first.
+- Fixed: a session that renamed itself while its Kiro window was minimized could not be continued. A minimized window keeps showing the old title on the tab, so the tab was not found. It now has the window bring what it shows up to date before it reads it, which also lets "new session" from the phone work with the window minimized.
+- Fixed: a draft in the chat box that only began like the text it was about to type (say, a draft starting with "continue" when it types that one word) was taken for that text and sent. Now a draft is sent only when it is that text in full.
 - When it cannot find a session's tab, the log lists the tabs it saw. When the record says a turn ended but its tab still says Working, it looks again a minute later instead of dropping it without a word.
 
 ## v0.3 (2026-11-05)

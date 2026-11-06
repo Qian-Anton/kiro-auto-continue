@@ -77,7 +77,32 @@ namespace KiroAutoContinue
             return null;
         }
 
+        // The tabs as UIA has them now; then a nudge, so that what changed meanwhile is in the tree by the next read
+        // (Nudge after reading, not before: the refresh it sets off replaces elements, and a read under way would
+        // fail on them). A read that hits a vanished element is tried again (Retry).
         public static List<KiroTab> GetTabs(AutomationElement root)
+        {
+            var tabs = Retry(() => ReadTabs(root), null) ?? new List<KiroTab>();
+            Nudge(root);
+            return tabs;
+        }
+
+        // A read of the chat panel, again if the panel changed under it (a refresh replaces the elements it reads:
+        // 11-06 GetInput threw ElementNotAvailableException in a minimized window); 'fallback' after three tries.
+        static T Retry<T>(Func<T> read, T fallback)
+        {
+            for (int attempt = 1; ; attempt++)
+            {
+                try { return read(); }
+                catch (Exception e) when (e is ElementNotAvailableException || e is System.Runtime.InteropServices.COMException)
+                {
+                    if (attempt >= 3) return fallback;
+                    Thread.Sleep(300);
+                }
+            }
+        }
+
+        static List<KiroTab> ReadTabs(AutomationElement root)
         {
             var tabs = new List<KiroTab>();
             foreach (AutomationElement t in root.FindAll(TreeScope.Descendants, ByClass("tab-bar-item")))
@@ -96,10 +121,9 @@ namespace KiroAutoContinue
             return tabs;
         }
 
-        // Read in the loops that wait for a tab's state: each read nudges, so the next one is current (Nudge).
+        // Read in the loops that wait for a tab's state; GetTabs nudges after each read, so the next one is current.
         public static KiroTab FindTab(AutomationElement root, string id)
         {
-            Nudge(root);
             foreach (var t in GetTabs(root)) if (t.Id == id) return t;
             return null;
         }
@@ -199,15 +223,20 @@ namespace KiroAutoContinue
             catch (Exception) { return ""; }
         }
 
+        // "changing" when the panel kept changing under the read; the callers wait for two equal marks.
         static string ViewMark(AutomationElement root)
         {
+            string mark = Retry(() =>
+            {
+                var content = ItemList(root);
+                if (content == null) return "none";
+                var bars = content.FindAll(TreeScope.Children, ByClass("kiro-checkpoint-bar"));
+                var last = Walker.GetLastChild(content);
+                string lastName = last != null ? (last.Current.Name ?? "").Trim() : "";
+                return bars.Count + "|" + ShownUser(root).Trim() + "|" + lastName;
+            }, "changing");
             Nudge(root);
-            var content = ItemList(root);
-            if (content == null) return "none";
-            var bars = content.FindAll(TreeScope.Children, ByClass("kiro-checkpoint-bar"));
-            var last = Walker.GetLastChild(content);
-            string lastName = last != null ? (last.Current.Name ?? "").Trim() : "";
-            return bars.Count + "|" + ShownUser(root).Trim() + "|" + lastName;
+            return mark;
         }
 
         // Show a tab and wait until its contents reach UIA and stop changing.
@@ -238,7 +267,7 @@ namespace KiroAutoContinue
 
         public static bool WaitShownUser(AutomationElement root, string text, int seconds = 20)
         {
-            for (int i = 0; i <= seconds; i++) { Nudge(root); if (SameText(ShownUser(root), text)) return true; Thread.Sleep(1000); }
+            for (int i = 0; i <= seconds; i++) { if (SameText(ShownUser(root), text)) return true; Nudge(root); Thread.Sleep(1000); }
             return false;
         }
 
@@ -272,9 +301,16 @@ namespace KiroAutoContinue
             return new TabFind { Count = hits.Count, Hit = hits.Count == 1 ? hits[0] : null, Seen = string.Join("; ", seen) };
         }
 
+        // The chat box as UIA has it now (null if it cannot be read); then a nudge for the next read (GetTabs).
         public static KiroInput GetInput(AutomationElement root, List<string> placeholders)
         {
+            var inp = Retry(() => ReadInput(root, placeholders), null);
             Nudge(root);
+            return inp;
+        }
+
+        static KiroInput ReadInput(AutomationElement root, List<string> placeholders)
+        {
             var wrap = root.FindFirst(TreeScope.Descendants, ByClass("chat-input-wrapper"));
             if (wrap == null) return null;
             AutomationElement ed = null, send = null;
@@ -302,15 +338,22 @@ namespace KiroAutoContinue
 
         static string SetInputText(KiroInput inp, string s)
         {
-            AutomationElement p = inp.Editor; IntPtr h = IntPtr.Zero;
-            while (p != null)
+            try
             {
-                if (p.Current.ClassName == "Chrome_RenderWidgetHostHWND") { h = new IntPtr(p.Current.NativeWindowHandle); break; }
-                p = Walker.GetParent(p);
+                AutomationElement p = inp.Editor; IntPtr h = IntPtr.Zero;
+                while (p != null)
+                {
+                    if (p.Current.ClassName == "Chrome_RenderWidgetHostHWND") { h = new IntPtr(p.Current.NativeWindowHandle); break; }
+                    p = Walker.GetParent(p);
+                }
+                if (h == IntPtr.Zero) return "no render window above the chat box";
+                var r = inp.Editor.Current.BoundingRectangle;
+                return Native.SetValue(h, (int)r.X, (int)r.Y, (int)r.Width, (int)r.Height, s);
             }
-            if (h == IntPtr.Zero) return "no render window above the chat box";
-            var r = inp.Editor.Current.BoundingRectangle;
-            return Native.SetValue(h, (int)r.X, (int)r.Y, (int)r.Width, (int)r.Height, s);
+            catch (Exception e) when (e is ElementNotAvailableException || e is System.Runtime.InteropServices.COMException)
+            {
+                return "the chat box changed while typing";
+            }
         }
 
         static bool Holds(KiroInput inp, string text)
@@ -357,7 +400,10 @@ namespace KiroAutoContinue
             var inp = GetInput(root, placeholders);
             if (inp == null || inp.Editor == null) return "chat box not found";
             bool typed = false; string why = "";
-            if (!inp.Empty) { if (Holds(inp, text)) typed = true; else return "draft"; }
+            // a draft is sent only when it is this whole text: Holds compares the first 12 characters, so a draft of
+            // yours that starts the same way (any draft beginning with "continue" when it types just that word), or an
+            // earlier text of ours, passed for it (11-06: a test sent the previous attempt's text instead of its own)
+            if (!inp.Empty) { if (Squash(inp.Text) == Squash(text)) typed = true; else return "draft"; }
             for (int attempt = 0; attempt < 2 && !typed; attempt++)
             {
                 if (!IsShown(root, id)) return "switched";

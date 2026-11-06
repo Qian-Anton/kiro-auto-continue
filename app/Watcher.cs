@@ -269,11 +269,18 @@ namespace KiroAutoContinue
             pd.Wait = "";
 
             var found = KiroUi.FindSessionTab(info);
-            if (found.Count != 1) { WaitLook(id, found.Count == 0 ? "its tab is not open in Kiro" : "several tabs have its title", 300, found.Count == 0 ? "notab" : "retry"); return; }
+            if (found.Count != 1)
+            {
+                Log(name + " : Kiro shows " + found.Seen);
+                WaitLook(id, found.Count == 0 ? "its tab is not open in Kiro" : "several tabs have its title", 300, found.Count == 0 ? "notab" : "retry");
+                return;
+            }
             var root = found.Hit.Root; var tab = found.Hit.Tab;
             if (tab.State == "Working")
             {
-                if (!turn.Restart) { pending.Remove(id); return; }
+                // its record says the turn ended, its tab that it runs: look again (a turn starting again shows in the
+                // record within seconds), rather than drop it unsaid
+                if (!turn.Restart) { WaitLook(id, "its tab says Working, though its record shows the turn ended", 60); return; }
                 if (!pd.ToldWorking) { pd.ToldWorking = true; Log(name + " : its tab says Working, but its record shows the turn was lost in the restart"); }
             }
             string locked = KiroUi.Locked() ? " (screen locked)" : "";
@@ -386,6 +393,7 @@ namespace KiroAutoContinue
             var found = KiroUi.FindSessionTab(info);
             if (found.Count != 1)
             {
+                Log(name + " : Kiro shows " + found.Seen);
                 if (!a.Notified) { a.Notified = true; WriteNotice("question", name, "NEEDS YOU", d.Why + "; " + (found.Count == 0 ? "its tab is not open in Kiro" : "several tabs have its title"), id); }
                 return true;
             }

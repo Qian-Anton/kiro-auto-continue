@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Fixed: after a few hours it could take several GB of memory and a third of a CPU core. Every few seconds it read the end of each session written in the last day again, 4 MB a session and up to 84 MB for a long one. It now keeps what it has read and reads only what was added since.
+- Fixed: a session that renamed itself while its Kiro window was minimized could not be continued. A minimized window keeps showing the old title on the tab, so the tab was not found. It now has the window bring its tab titles up to date first.
+- When it cannot find a session's tab, the log lists the tabs it saw. When the record says a turn ended but its tab still says Working, it looks again a minute later instead of dropping it without a word.
 
 ## v0.3 (2026-11-05)
 

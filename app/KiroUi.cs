@@ -12,7 +12,7 @@ namespace KiroAutoContinue
     internal sealed class KiroTab { public AutomationElement El; public string Id; public string Title; public bool Selected; public string State; }
     internal sealed class KiroInput { public AutomationElement Editor; public AutomationElement Send; public bool SendEnabled; public string Text; public bool Empty; }
     internal sealed class TabHit { public KiroWindow Win; public AutomationElement Root; public KiroTab Tab; }
-    internal sealed class TabFind { public int Count; public TabHit Hit; }
+    internal sealed class TabFind { public int Count; public TabHit Hit; public string Seen = ""; }   // Seen: what the windows showed
 
     // Reading and driving the Kiro chat panel through UI Automation. Port of src/KiroUi.ps1 (in v0.2). All calls run on the
     // watcher's STA thread, which first calls Init() to search the raw view (Chromium's plain divs are not in the
@@ -96,10 +96,41 @@ namespace KiroAutoContinue
             return tabs;
         }
 
+        // Read in the loops that wait for a tab's state: each read nudges, so the next one is current (Nudge).
         public static KiroTab FindTab(AutomationElement root, string id)
         {
+            Nudge(root);
             foreach (var t in GetTabs(root)) if (t.Id == id) return t;
             return null;
+        }
+
+        // A minimized Kiro window keeps its page's changes from UI Automation until something is done to it. 11-06 a
+        // session renamed itself (update_session_information) while its window was minimized: its tab kept the old
+        // title for hours, and every look for the new one found no tab. Scrolling the shown tab into view moves
+        // nothing on screen, and about a second later the tree is current (an action done to the window, like
+        // selecting a tab, has the same effect). Tested on Kiro 1.4.86.
+        public static void Nudge(AutomationElement root)
+        {
+            try
+            {
+                AutomationElement pick = null;
+                foreach (AutomationElement t in root.FindAll(TreeScope.Descendants, ByClass("tab-bar-item")))
+                {
+                    if (pick == null) pick = t;
+                    bool sel = false;
+                    try { sel = ((SelectionItemPattern)t.GetCurrentPattern(SelectionItemPattern.Pattern)).Current.IsSelected; } catch { }
+                    if (sel) { pick = t; break; }
+                }
+                object p;
+                if (pick != null && pick.TryGetCurrentPattern(ScrollItemPattern.Pattern, out p)) ((ScrollItemPattern)p).ScrollIntoView();
+            }
+            catch { }
+        }
+
+        static bool Minimized(KiroWindow w)
+        {
+            try { return ((WindowPattern)w.El.GetCurrentPattern(WindowPattern.Pattern)).Current.WindowVisualState == WindowVisualState.Minimized; }
+            catch { return false; }
         }
 
         // Select a tab and wait until it is the one shown.
@@ -170,6 +201,7 @@ namespace KiroAutoContinue
 
         static string ViewMark(AutomationElement root)
         {
+            Nudge(root);
             var content = ItemList(root);
             if (content == null) return "none";
             var bars = content.FindAll(TreeScope.Children, ByClass("kiro-checkpoint-bar"));
@@ -206,28 +238,43 @@ namespace KiroAutoContinue
 
         public static bool WaitShownUser(AutomationElement root, string text, int seconds = 20)
         {
-            for (int i = 0; i <= seconds; i++) { if (SameText(ShownUser(root), text)) return true; Thread.Sleep(1000); }
+            for (int i = 0; i <= seconds; i++) { Nudge(root); if (SameText(ShownUser(root), text)) return true; Thread.Sleep(1000); }
             return false;
         }
 
         // The tab of a session: in the Kiro window of its workspace (any if none matches), the tabs with its title.
+        // The windows are nudged first and read 1.5 s later, so a minimized one shows its current titles (Nudge).
+        // Seen: each window's tabs as read, for the log.
         public static TabFind FindSessionTab(SessionInfo info)
         {
             var wins = GetWindows();
             var mine = wins.Where(w => w.Workspace == info.Workspace).ToList();
             if (mine.Count == 0) mine = wins;
-            var hits = new List<TabHit>();
+            var roots = new List<KeyValuePair<KiroWindow, AutomationElement>>();
             foreach (var w in mine)
             {
                 var root = GetChatRoot(w);
-                if (root == null) continue;
-                foreach (var t in GetTabs(root)) if (t.Title == info.Title) hits.Add(new TabHit { Win = w, Root = root, Tab = t });
+                if (root != null) Nudge(root);
+                roots.Add(new KeyValuePair<KiroWindow, AutomationElement>(w, root));
             }
-            return new TabFind { Count = hits.Count, Hit = hits.Count == 1 ? hits[0] : null };
+            if (roots.Any(r => r.Value != null)) Thread.Sleep(1500);
+            var hits = new List<TabHit>();
+            var seen = new List<string>();
+            foreach (var r in roots)
+            {
+                string where = r.Key.Workspace + (Minimized(r.Key) ? " (minimized)" : "");
+                if (r.Value == null) { seen.Add(where + ": no chat panel"); continue; }
+                var tabs = GetTabs(r.Value);
+                foreach (var t in tabs) if (t.Title == info.Title) hits.Add(new TabHit { Win = r.Key, Root = r.Value, Tab = t });
+                seen.Add(where + ": " + (tabs.Count > 0 ? string.Join(", ", tabs.Select(t => "[" + t.Title + "]")) : "no tabs"));
+            }
+            if (wins.Count == 0) seen.Add("no Kiro window");
+            return new TabFind { Count = hits.Count, Hit = hits.Count == 1 ? hits[0] : null, Seen = string.Join("; ", seen) };
         }
 
         public static KiroInput GetInput(AutomationElement root, List<string> placeholders)
         {
+            Nudge(root);
             var wrap = root.FindFirst(TreeScope.Descendants, ByClass("chat-input-wrapper"));
             if (wrap == null) return null;
             AutomationElement ed = null, send = null;

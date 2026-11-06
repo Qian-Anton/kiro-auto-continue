@@ -208,6 +208,7 @@ namespace KiroAutoContinue
             if (info == null) return "cannot read its session.json";
             if (waitIdle && !WaitRemoteIdle()) return "busy";
             var found = KiroUi.FindSessionTab(info);
+            if (found.Count != 1) Log(SessionLabel(f) + " : Kiro shows " + found.Seen);
             if (found.Count == 0) return "noTab";
             if (found.Count > 1) return "twoTabs";
             var root = found.Hit.Root; var tab = found.Hit.Tab;
@@ -229,6 +230,7 @@ namespace KiroAutoContinue
             if (info == null) return "cannot read its session.json";
             if (waitIdle && !WaitRemoteIdle()) return "busy";
             var found = KiroUi.FindSessionTab(info);
+            if (found.Count != 1) Log(SessionLabel(f) + " : Kiro shows " + found.Seen);
             if (found.Count == 0) return "noTab";
             if (found.Count > 1) return "twoTabs";
             var root = found.Hit.Root; var tab = found.Hit.Tab;
